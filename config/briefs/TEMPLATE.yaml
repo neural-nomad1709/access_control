@@ -1,0 +1,111 @@
+# ---------------------------------------------------------------------------
+# TASK BRIEF TEMPLATE
+#
+# Copy this, fill it in, and validate it BEFORE the change window:
+#     uv run ac brief validate config\briefs\my-brief.yaml
+#
+# A brief answers "what should happen on this host, this time".
+# It does NOT define new capabilities -- everything under `operations:` must
+# already exist in config/operations.yaml. That separation is deliberate: adding
+# a capability is a reviewed change; using one is a work order.
+#
+# Anything marked REQUIRED must be present or the brief is rejected.
+# ---------------------------------------------------------------------------
+
+brief:
+  id: TB-2026-0812-001            # REQUIRED. Your own reference. Appears in the audit trail.
+  title: Short statement of intent # REQUIRED. What a reader should understand in one line.
+  host: win-target02                # REQUIRED. Must match a host_id in inventory.yaml.
+
+  requested_by: amit.kala         # Who asked for this
+  change_ref: CHG0043211          # Ticket, so the run is traceable
+  window: "2026-08-12 22:00-23:00 AEST"
+  description: >-
+    A paragraph for whoever reads this at 3am. Why is this being done, what is
+    the expected impact, and what should they know that is not obvious from the
+    operation names.
+
+# ---------------------------------------------------------------------------
+# PREFLIGHT -- what must be true before ANYTHING runs.
+#
+# Connection liveness and host identity are always checked, whether or not you
+# list anything here. Everything below is additional.
+# ---------------------------------------------------------------------------
+preflight:
+  # STRONGLY RECOMMENDED. Without it, a stale or reused local port forward could
+  # point this brief at a different server and nothing would notice -- the
+  # commands would succeed, on the wrong machine.
+  expect_hostname: WIN-TARGET02
+
+  require_free_disk_gb: 5
+  # disk_drive: 'D'               # defaults to C: on Windows, / on Unix
+
+  require_services_running:
+    - Winmgmt
+
+  abort_if:
+    - pending_reboot              # installing over one produces misleading failures
+    - active_msi_install          # otherwise you get MSI 1618
+
+  # Arbitrary read-only checks. A check that tries to change something is
+  # refused -- preflight verifies state, it does not create it.
+  checks:
+    - name: package-present
+      run: Test-Path 'D:\packages\agent-1.4.2.msi'
+      expect_contains: "True"
+
+# ---------------------------------------------------------------------------
+# OPERATIONS -- what to do, in order. REQUIRED.
+#
+# Each must exist in operations.yaml and be permitted on this host.
+# ---------------------------------------------------------------------------
+operations:
+  - operation: install-package
+    params:
+      package_share: 'D:\packages'  # server-local path ON THE TARGET
+      package: agent-1.4.2.msi
+    on_failure: stop              # stop | continue | rollback
+    note: Optional context for the operator reading the approval prompt
+
+  - operation: windows-health
+    on_failure: continue          # a health snapshot failing should not abort
+
+  # Resume a partially-completed operation rather than repeating work:
+  # - operation: patch-windows
+  #   start_at: apply
+  #   only_steps: [verify]
+
+# ---------------------------------------------------------------------------
+# WHAT "DONE" LOOKS LIKE
+#
+# Written for a human to tick off. If you cannot state these, the brief is not
+# ready -- nobody will be able to tell whether the run achieved anything.
+# ---------------------------------------------------------------------------
+success_criteria:
+  - The MonitoringAgent service is present and Running
+  - "'Monitoring Agent 1.4.2' appears in the installed-programs list"
+  - No new Application event log errors from the installer
+
+# What must NOT happen. Advisory to the reader, and a record of intent.
+must_not:
+  - Reboot the host -- this window does not permit an outage
+  - Touch any other service on this machine
+
+# ---------------------------------------------------------------------------
+# RULES -- the boundaries the agent must not cross.
+# Defaults shown; omit any you are happy with.
+# ---------------------------------------------------------------------------
+rules:
+  confirm_destructive: true       # the operator approves each gated operation
+  stop_on_first_failure: true
+  reboot_allowed: false           # a brief containing a rebooting operation is rejected
+  max_duration_minutes: 60
+  allow_diagnostic_commands: true # read-only investigation when something fails
+  allow_unlisted_operations: false
+
+# ---------------------------------------------------------------------------
+# ROLLBACK -- only needed if any operation declares `on_failure: rollback`.
+# ---------------------------------------------------------------------------
+# rollback:
+#   - operation: uninstall-package
+#     params: {package: agent-1.4.2.msi}

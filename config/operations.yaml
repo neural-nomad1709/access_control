@@ -1,0 +1,384 @@
+# ---------------------------------------------------------------------------
+# Operation catalog: the configurable list of things that may be run, and the
+# hosts each one is permitted on.
+#
+# This is the file you edit to give the agent a new capability. Nothing outside
+# this catalog can be run as an "operation" -- `run-command` is the deliberate
+# escape hatch, and it is gated.
+#
+# Every operation must declare `host_ids` (or `tags`) so it is unambiguous which
+# machines it applies to. Use host_ids: ['*'] only for genuinely host-agnostic
+# operations.
+#
+# Step anatomy:
+#   run          the script; {{placeholders}} come from params and host vars
+#   expect       what success means (default: exit code 0)
+#   on_failure   what to gather and what hint to surface when it does not
+#   destructive  marks a step that changes state irreversibly (implies gating)
+#
+# Exit codes are resolved for you: a native tool's $LASTEXITCODE, or 1 if the
+# script threw. See docs/implementation.md for how that works.
+# ---------------------------------------------------------------------------
+
+operations:
+
+  # =========================================================================
+  # Windows: install a package from the server-local share
+  # =========================================================================
+  - id: install-package
+    description: >-
+      Install an MSI or EXE from the server-local package share, verifying the
+      package exists first and confirming registration afterwards.
+    tags: [windows]
+    requires_permission: true
+    params:
+      - name: package_share
+        required: true
+        description: >-
+          Folder on the TARGET holding the package, e.g. D:\packages. Must be a
+          server-local path: a remote session cannot forward your credentials on
+          to a second machine, so \\fileserver\... fails with access denied.
+      - name: package
+        required: true
+        description: File name within the package share, e.g. agent-1.4.2.msi
+      - name: install_args
+        required: false
+        default: "/quiet /norestart"
+        description: Silent-install switches passed to the installer
+    steps:
+      - id: preflight
+        desc: Confirm the package exists and there is room to install it
+        run: |
+          $pkg = Join-Path '{{package_share}}' '{{package}}'
+          if (-not (Test-Path -LiteralPath $pkg)) {
+              Write-Error "package not found: $pkg"
+              exit 2
+          }
+          $item = Get-Item -LiteralPath $pkg
+          "package : $($item.FullName)"
+          "size_mb : $([math]::Round($item.Length / 1MB, 2))"
+          $free = (Get-PSDrive C).Free
+          "free_gb : $([math]::Round($free / 1GB, 2))"
+          if ($free -lt 2GB) {
+              Write-Error "less than 2 GB free on C:"
+              exit 3
+          }
+          "PREFLIGHT_OK"
+        expect:
+          exit_code: 0
+          stdout_contains: PREFLIGHT_OK
+        on_failure:
+          hints:
+            2: >-
+              The package is not on the share. List what is actually there with
+              run_command: Get-ChildItem '{{package_share}}'
+            3: >-
+              Not enough free space on C:. Free some, or install to another
+              volume, before retrying.
+
+      - id: install
+        desc: Run the installer silently
+        timeout_s: 1800
+        destructive: true
+        run: |
+          $pkg = Join-Path '{{package_share}}' '{{package}}'
+          $logDir = 'C:\Windows\Temp'
+          $log = Join-Path $logDir ('ac-install-' + [IO.Path]::GetFileNameWithoutExtension($pkg) + '.log')
+          if ($pkg -like '*.msi') {
+              $args = @('/i', "`"$pkg`"", '/qn', '/norestart', '/l*v', "`"$log`"")
+              $p = Start-Process -FilePath 'msiexec.exe' -ArgumentList $args -Wait -PassThru
+          } else {
+              $p = Start-Process -FilePath $pkg -ArgumentList '{{install_args}}' -Wait -PassThru
+          }
+          "installer_exit : $($p.ExitCode)"
+          "verbose_log    : $log"
+          exit $p.ExitCode
+        expect:
+          exit_code: 0
+        on_failure:
+          collect:
+            - files:
+                - 'C:\Windows\Temp\ac-install-*.log'
+                - 'C:\Windows\Temp\MSI*.LOG'
+              tail_lines: 120
+            - eventlog:
+                log: Application
+                newest: 25
+                level: error
+          hints:
+            "1603": >-
+              Generic MSI failure. The verbose log collected above is the real
+              diagnosis -- search it for "Return value 3", which marks the action
+              that actually failed.
+            "1618": >-
+              Another installation is already in progress. Wait for it to finish
+              (run_command: Get-Process msiexec) and retry this step.
+            "1619": The package could not be opened -- it may be corrupt or truncated.
+            "1620": The package is not a valid installer file.
+            "3010": >-
+              The install SUCCEEDED but requires a reboot to complete. Do not
+              re-run it; ask the operator whether to reboot.
+            "*": >-
+              Read the collected installer log and the Application event log
+              entries above before retrying.
+
+      - id: verify
+        desc: Confirm the product is now registered
+        run: |
+          $keys = @(
+              'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+              'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          )
+          Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue |
+              Where-Object { $_.DisplayName } |
+              Sort-Object -Property InstallDate -Descending |
+              Select-Object -First 15 DisplayName, DisplayVersion, InstallDate |
+              Format-Table -AutoSize
+        on_failure:
+          hints:
+            "*": >-
+              The install reported success but the product is not in the
+              uninstall registry. Some installers register elsewhere -- confirm
+              with the vendor's own check before treating this as a failure.
+
+  # =========================================================================
+  # Windows: apply patches staged on the server-local share
+  # =========================================================================
+  - id: patch-windows
+    description: >-
+      Apply .msu servicing packages already staged on the server-local patch
+      share, then report whether a reboot is pending. Does not reboot.
+    tags: [windows]
+    requires_permission: true
+    destructive: true
+    params:
+      - name: patch_share
+        required: true
+        description: >-
+          Folder on the TARGET holding the .msu files, e.g. D:\packages\patches.
+          Server-local for the same double-hop reason as package_share.
+    steps:
+      - id: current-state
+        desc: Record the build and the most recent hotfixes before changing anything
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          "caption : $($os.Caption)"
+          "version : $($os.Version)"
+          "build   : $($os.BuildNumber)"
+          "--- recent hotfixes ---"
+          Get-HotFix | Sort-Object InstalledOn -Descending |
+              Select-Object -First 10 HotFixID, Description, InstalledOn |
+              Format-Table -AutoSize
+
+      - id: list-patches
+        desc: List the .msu packages staged for installation
+        run: |
+          $share = '{{patch_share}}'
+          if (-not (Test-Path -LiteralPath $share)) {
+              Write-Error "patch share not found: $share"
+              exit 2
+          }
+          $files = Get-ChildItem -LiteralPath $share -Filter *.msu -ErrorAction SilentlyContinue
+          if (-not $files) {
+              Write-Error "no .msu files in $share"
+              exit 3
+          }
+          $files | Select-Object Name, @{n='SizeMB';e={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
+          "PATCHES_FOUND=$($files.Count)"
+        expect:
+          exit_code: 0
+          stdout_contains: PATCHES_FOUND
+        on_failure:
+          hints:
+            2: The patch share path is wrong. Check the brief's `patch_share` param.
+            3: >-
+              The share exists but holds no .msu files. Confirm with the operator
+              that the patches were staged before this run.
+
+      - id: apply
+        desc: Install each staged .msu with DISM
+        timeout_s: 5400
+        destructive: true
+        run: |
+          $share = '{{patch_share}}'
+          $failed = 0
+          foreach ($msu in Get-ChildItem -LiteralPath $share -Filter *.msu) {
+              "=== $($msu.Name) ==="
+              $p = Start-Process -FilePath 'wusa.exe' `
+                   -ArgumentList "`"$($msu.FullName)`"", '/quiet', '/norestart' -Wait -PassThru
+              "exit: $($p.ExitCode)"
+              # 0 = installed, 3010 = installed and needs a reboot,
+              # 2359302 = already installed.
+              if ($p.ExitCode -notin @(0, 3010, 2359302)) { $failed++ }
+          }
+          "FAILED_COUNT=$failed"
+          if ($failed -gt 0) { exit 1 }
+        expect:
+          exit_code: 0
+          stdout_contains: FAILED_COUNT=0
+        on_failure:
+          collect:
+            - files: ['C:\Windows\Logs\CBS\CBS.log']
+              tail_lines: 150
+            - eventlog:
+                log: Setup
+                newest: 30
+          hints:
+            "*": >-
+              CBS.log is where Windows servicing records the real reason. Look for
+              the first "Failed" line after the package name. A 0x800f081f means a
+              missing prerequisite payload.
+
+      - id: reboot-status
+        desc: Report whether a reboot is now pending (does not reboot)
+        run: |
+          $pending = $false
+          if (Get-Item 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending' -ErrorAction SilentlyContinue) { $pending = $true }
+          if (Get-Item 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired' -ErrorAction SilentlyContinue) { $pending = $true }
+          "REBOOT_PENDING=$pending"
+          if ($pending) {
+              "A reboot is required to finish applying these patches."
+              "This operation does not reboot -- ask the operator to schedule it."
+          }
+
+  # =========================================================================
+  # Windows: read-only health check
+  # =========================================================================
+  - id: windows-health
+    description: Read-only snapshot of disk, memory, uptime and failed services.
+    tags: [windows]
+    requires_permission: false
+    steps:
+      - id: snapshot
+        desc: Collect basic health indicators
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          "host    : $env:COMPUTERNAME"
+          "os      : $($os.Caption) build $($os.BuildNumber)"
+          "uptime  : $((Get-Date) - $os.LastBootUpTime)"
+          "mem_free_gb : $([math]::Round($os.FreePhysicalMemory/1MB,2))"
+          "--- disks ---"
+          Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' |
+              Select-Object DeviceID,
+                  @{n='SizeGB';e={[math]::Round($_.Size/1GB,1)}},
+                  @{n='FreeGB';e={[math]::Round($_.FreeSpace/1GB,1)}} |
+              Format-Table -AutoSize
+          "--- services set to auto but not running ---"
+          Get-Service | Where-Object { $_.StartType -eq 'Automatic' -and $_.Status -ne 'Running' } |
+              Select-Object Name, Status, StartType | Format-Table -AutoSize
+
+  # =========================================================================
+  # Windows: gather diagnostics without changing anything
+  # =========================================================================
+  - id: collect-diagnostics
+    description: Gather recent errors from the event log and a named log file.
+    tags: [windows]
+    requires_permission: false
+    params:
+      - name: log_path
+        required: false
+        default: 'C:\Windows\Temp\*.log'
+      - name: newest
+        required: false
+        default: 30
+    steps:
+      - id: eventlog
+        desc: Recent Application and System errors
+        run: |
+          foreach ($log in 'Application', 'System') {
+              "=== $log ==="
+              Get-WinEvent -FilterHashtable @{LogName=$log; Level=2} -MaxEvents {{newest}} -ErrorAction SilentlyContinue |
+                  Select-Object TimeCreated, Id, ProviderName, Message |
+                  Format-List
+          }
+      - id: logfile
+        desc: Tail the most recently written matching log file
+        run: |
+          $m = Get-ChildItem -Path '{{log_path}}' -ErrorAction SilentlyContinue |
+               Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($m) { "--- $($m.FullName) ---"; Get-Content -Path $m.FullName -Tail 200 }
+          else { "no file matched {{log_path}}" }
+
+  # =========================================================================
+  # Linux / Unix / AIX
+  # =========================================================================
+  - id: linux-health
+    description: Read-only snapshot of uptime, disk, memory and recent log errors.
+    tags: [linux, unix, aix]
+    requires_permission: false
+    shell: bash
+    steps:
+      - id: snapshot
+        desc: Collect basic health indicators
+        shell: bash
+        run: |
+          echo "host   : $(hostname)"
+          echo "kernel : $(uname -a)"
+          echo "uptime : $(uptime)"
+          echo "--- disk ---"
+          # AIX's df has no -h flag. Probe for it rather than piping stderr to
+          # /dev/null: hiding the error turned this into a silently empty
+          # section on AIX, which is worse than a visible failure.
+          if df -h >/dev/null 2>&1; then
+              df -h | head -20
+          else
+              df -k | head -20
+          fi
+          echo "--- memory ---"
+          if command -v free >/dev/null 2>&1; then
+              free -m
+          elif command -v svmon >/dev/null 2>&1; then
+              svmon -G          # AIX
+          else
+              vmstat | head -10
+          fi
+
+  - id: linux-service-status
+    description: Report the status of one service without changing it.
+    tags: [linux, unix]
+    requires_permission: false
+    shell: bash
+    params:
+      - name: service
+        required: true
+    steps:
+      - id: status
+        desc: Query the service manager
+        shell: bash
+        run: |
+          # Three service managers, because "unix" spans more than systemd:
+          # systemd on modern Linux, SysV `service` elsewhere, and SRC (lssrc)
+          # on AIX, which has neither.
+          if command -v systemctl >/dev/null 2>&1; then
+              systemctl status '{{service}}' --no-pager 2>&1 | head -40
+          elif command -v service >/dev/null 2>&1; then
+              service '{{service}}' status 2>&1 | head -40
+          elif command -v lssrc >/dev/null 2>&1; then
+              lssrc -s '{{service}}' 2>&1 | head -40
+          else
+              echo "no known service manager (systemctl, service, lssrc) on this host"
+              exit 1
+          fi
+        expect:
+          any_exit_code: true
+
+  # =========================================================================
+  # Escape hatch
+  # =========================================================================
+  - id: run-command
+    description: >-
+      Run one ad-hoc command. Gated: the operator must approve it. Intended for
+      diagnosing a failed step, not as the normal way to do work -- anything done
+      more than once should become a named operation in this file.
+    host_ids: ['*']
+    requires_permission: true
+    params:
+      - name: command
+        required: true
+    steps:
+      - id: exec
+        desc: Execute the supplied command
+        run: |
+          {{command}}
+        expect:
+          any_exit_code: true

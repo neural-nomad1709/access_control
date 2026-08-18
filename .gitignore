@@ -1,0 +1,67 @@
+# ---------------------------------------------------------------------------
+# NOTE: this repository lives inside a OneDrive-synced folder. Anything that is
+# not ignored here is uploaded to the cloud. Never relax the secret rules below.
+# ---------------------------------------------------------------------------
+
+# Secrets and anything that could carry one
+*.key
+*.pem
+*.ppk
+*.pfx
+*.p12
+.env
+.env.*
+secrets*
+*password*
+PLAN.md
+.venv/pyvenv.cfg
+
+# Credential MATERIAL, not the module that prompts for it. The old blanket
+# `*credential*` also matched src/access_control/credentials.py and silently
+# kept a core source module out of the repository entirely.
+credentials.json
+*credentials.y*ml
+*credentials.txt
+
+# The real estate: hostnames, addresses and logins for live production servers.
+# The committed example file documents the format with placeholder values.
+config/inventory.yaml
+config/inventory_Orig_Copy.yaml
+config/inventory copy.yaml
+
+# Operational records captured from live hosts -- server log excerpts, incident
+# forensics, session evidence. These describe real infrastructure and must not
+# be published. Keep them here; publish nothing from this directory.
+reports/
+
+# Local, per-user overrides and the unmasked twins of committed documents.
+# STATUS.local.md carries the real host identifiers that STATUS.md redacts.
+*.local.yaml
+*.local.yml
+*.local.md
+
+# Session audit logs. The real location is %LOCALAPPDATA%\access_control\logs,
+# but ignore any stray copies written into the repo.
+logs/
+*.jsonl
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini

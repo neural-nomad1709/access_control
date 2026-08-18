@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"/c/Users/amit.kala/OneDrive - WiseTech Global Pty Ltd/AK/claude_work/access_control\" 2>&1 | head -50)",
+      "Read(//c/Users/amit.kala/OneDrive - WiseTech Global Pty Ltd/AK/claude_work/access_control/**)",
+      "Bash(diff -rq --exclude='.venv' --exclude='.pytest_cache' --exclude='.git' --exclude='__pycache__' \"/c/Users/amit.kala/OneDrive - WiseTech Global Pty Ltd/AK/claude_work/access_control\" \"/c/AILab/projects/access_control\" 2>&1)",
+      "Bash(mkdir -p \"/c/Users/amit.kala/OneDrive - WiseTech Global Pty Ltd/AK/claude_work/access_control/.claude\")",
+      "Bash(cp \"/c/AILab/projects/access_control/.claude/settings.json\" \"/c/Users/amit.kala/OneDrive - WiseTech Global Pty Ltd/AK/claude_work/access_control/.claude/settings.json\")"
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Campaign: run one reviewed brief across many hosts, concurrently.
+#
+# A campaign is a fan-out. The instruction (the brief) lives HERE in the repo,
+# reviewed and version-controlled -- never on the target. Each target names a
+# host and the brief to run on it; one brief template can serve many hosts
+# because a target may override the brief's own `host:`.
+#
+# Credentials are NOT handled by campaigns. Open each host's session first:
+#     uv run ac connect <host>
+# then dispatch:
+#     uv run ac campaign validate config/campaigns/qa-health-sweep.yaml
+#     uv run ac campaign run      config/campaigns/qa-health-sweep.yaml
+# Hosts without a live session are reported and skipped, not connected to.
+# ---------------------------------------------------------------------------
+
+campaign:
+  id: qa-health-sweep
+  title: QA fleet read-only health sweep
+  requested_by: operator
+  change_ref: DEMO-HEALTH
+  description: >-
+    Run the read-only windows-health brief across the QA Windows fleet. Safe to
+    run any time -- it changes nothing.
+  max_parallel: 8        # how many hosts to drive at once
+  confirm: false         # this campaign has no gated operations
+
+targets:
+  # The brief names win-target01-dev itself, so no host override is needed here.
+  - host: win-target01-dev
+    brief: config/briefs/qa-health.yaml
+
+  # Same brief, retargeted to another host by overriding `host:`. Uncomment when
+  # that host exists in inventory.yaml and has a live session:
+  # - host: appwin-qa-vpn
+  #   brief: config/briefs/qa-health.yaml
+  #   note: second QA app server

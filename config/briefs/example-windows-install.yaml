@@ -1,0 +1,75 @@
+# A realistic change-window brief: install a package on a Windows target that
+# sits behind a jump server.
+#
+# This is the shape most real work takes -- preflight, one destructive
+# operation, one verification, explicit success criteria.
+#
+#   uv run ac brief validate config\briefs\example-windows-install.yaml
+#   uv run ac connect win-target02 --ops install-package,windows-health
+#   uv run ac brief run config\briefs\example-windows-install.yaml --confirm
+
+brief:
+  id: TB-2026-0812-001
+  title: Install monitoring agent 1.4.2 on the QA application server
+  host: win-target02
+  requested_by: amit.kala
+  change_ref: CHG0043211
+  window: "2026-08-12 22:00-23:00 AEST"
+  description: >-
+    Installs the monitoring agent from the server-local package share. The
+    installer is silent and does not require a reboot; if it returns 3010 the
+    install SUCCEEDED and a reboot is pending -- do not re-run it, raise a
+    separate change for the reboot instead.
+
+preflight:
+  # Without this, a stale port forward could point the install at a different
+  # server. The commands would succeed. On the wrong machine.
+  expect_hostname: WIN-TARGET02
+
+  require_free_disk_gb: 5
+  require_services_running:
+    - Winmgmt                     # WMI: the installer needs it
+
+  abort_if:
+    - pending_reboot              # installing over one produces misleading failures
+    - active_msi_install          # otherwise the installer returns 1618
+
+  checks:
+    - name: package-staged
+      run: Test-Path 'D:\packages\agent-1.4.2.msi'
+      expect_contains: "True"
+
+operations:
+  - operation: install-package
+    params:
+      # Server-LOCAL path. Keeping packages on the target sidesteps WinRM's
+      # double-hop problem: a remote session cannot forward your credentials on
+      # to a UNC file share, so \\fileserver\... fails with access denied.
+      package_share: 'D:\packages'
+      package: agent-1.4.2.msi
+    on_failure: stop
+    note: >-
+      Silent MSI install with verbose logging to C:\Windows\Temp. On failure the
+      verbose log and the Application event log are collected automatically.
+
+  - operation: windows-health
+    on_failure: continue
+    note: Post-install snapshot for the record; a failure here does not undo the install.
+
+success_criteria:
+  - The install step returned exit code 0 (or 3010, meaning a reboot is pending)
+  - "'Monitoring Agent' with version 1.4.2 appears in the verify step's output"
+  - No new Application event log errors attributable to the installer
+
+must_not:
+  - Reboot the host -- this window does not permit an outage
+  - Modify or restart any other service on this machine
+  - Re-run the install after a 3010 result
+
+rules:
+  confirm_destructive: true       # the operator approves the install explicitly
+  stop_on_first_failure: true
+  reboot_allowed: false
+  max_duration_minutes: 45
+  allow_diagnostic_commands: true # so the agent can read logs if it fails
+  allow_unlisted_operations: false

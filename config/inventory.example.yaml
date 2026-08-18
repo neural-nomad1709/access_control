@@ -1,0 +1,185 @@
+# ---------------------------------------------------------------------------
+# Inventory: nodes, explicit connectivity, logging and agent identity.
+#
+# THIS FILE CONTAINS NO SECRETS and is meant to be committed and shared. Every
+# password is prompted for at connect time and is never written anywhere.
+#
+# Copy to `inventory.yaml` and edit for your environment:
+#     copy config\inventory.example.yaml config\inventory.yaml
+#
+# The central rule: CONNECTIVITY IS DECLARED, NEVER DISCOVERED. A machine with
+# no `via:` cannot be traversed, and no direct connection is attempted instead.
+# Getting a "No route defined" error means declaring the leg, not retrying.
+# ---------------------------------------------------------------------------
+
+# --- Where the audit trail goes -------------------------------------------
+logging:
+  enabled: true
+  # Defaults to %LOCALAPPDATA%\access_control\logs. Point it at a collected
+  # directory for SIEM ingestion. Never inside this repo.
+  # path: D:\Agent\Logs
+  retention_days: 30          # 0 keeps everything
+  level: INFO                 # DEBUG | INFO | WARNING | ERROR
+
+# --- Who is acting ---------------------------------------------------------
+agent:
+  # Each run gets AGT-<date>-<seq> and each session SES-<seq>, so concurrent
+  # executions stay separable in the trail.
+  id_prefix: AGT
+  session_prefix: SES
+
+# ---------------------------------------------------------------------------
+# NODES -- ONE BLOCK PER MACHINE
+#
+# `hops:` are machines on the way (bastions, jump servers); `hosts:` are final
+# targets. Both take the same fields.
+#
+#   role         bastion | jump | target | node   (documentation + report labels)
+#   kind         ssh | linux | unix | aix | solaris | windows
+#   username     the identity to authenticate as
+#   domain       AD/NT domain -- a bare username is qualified to DOMAIN\user
+#   auth         method / key_file / transport
+#   context      environment / datacenter / network_zone / owner
+#   tags         used to bind operations to hosts
+#   via          how this machine is reached, and from where
+#
+# Identity lives here and only here. A leg never restates `username`/`domain`,
+# so the two cannot drift apart.
+#
+# `context.environment` is a hard boundary: a route may not cross it. That is
+# what stops a QA bastion becoming a path into production.
+#
+# --- The `via:` block ------------------------------------------------------
+#
+#   via:
+#     from: <node id, or `local` for the operator's own machine>
+#     hostname/port/protocol                    -- one channel, the common case
+#   or
+#     automation:  {hostname, port, protocol}   -- how commands run
+#     interactive: {hostname, port, protocol}   -- how a human gets a desktop
+#
+# Addresses are always AS SEEN FROM `from:`. The same machine is reached
+# differently depending on where you are standing, which is why the address
+# belongs to the leg rather than to the machine.
+#
+# PORTS ARE MANDATORY. Defaulting them is how a connection silently goes
+# somewhere it was never meant to.
+#
+# `automation` and `interactive` are separate because RDP carries pixels and
+# cannot return an exit code, so it can never be an automation protocol.
+# Declaring RDP under `automation` is rejected at load time.
+#
+# `preestablished: true` means the address is the local end of a tunnel that
+# already exists (an mRemoteNG SSH-tunnel entry, say), so this tool dials it
+# rather than building a second forward on top. A loopback address implies it.
+#
+# A machine reachable from more than one place may give `via:` a list of blocks.
+# Two ways in of equal length are still refused as ambiguous -- declaring
+# alternatives does not license guessing between them.
+# ---------------------------------------------------------------------------
+hops:
+  bastion1:
+    role: bastion
+    kind: ssh
+    username: opuser
+    domain: domain
+    description: QA SSH bastion
+    context:
+      environment: QA
+      datacenter: East
+      network_zone: Internal
+      owner: PlatformOps
+    auth:
+      # password | key | key+password | agent
+      # `key+password` matches OpenSSH `AuthenticationMethods publickey,password`:
+      # the key gets you partway and a password completes the login.
+      method: key+password
+      key_file: ~/.ssh/id_rsa
+    via:
+      from: local
+      hostname: bastion1.example.net
+      port: 2222
+      protocol: ssh
+
+  jump1:
+    role: jump
+    kind: windows
+    username: jmpuser
+    domain: corp
+    description: QA jump server
+    context:
+      environment: QA
+      datacenter: East
+      network_zone: Internal
+      owner: PlatformOps
+    auth:
+      transport: ntlm          # NTLM needs no SPN, so it works through a tunnel
+    # Its real address as seen from the bastion; this tool builds the forward.
+    via:
+      from: bastion1
+      automation:  {hostname: 10.20.4.11, port: 5985, protocol: winrm}
+      interactive: {hostname: 10.20.4.11, port: 3389, protocol: rdp}
+
+    # The same jump server reached over a tunnel you started yourself:
+    #   ssh -p 2222 -L 44001:jump1.corp.net:3389 -L 45985:jump1.corp.net:5985 \
+    #       opuser@bastion1.example.net
+    #
+    # via:
+    #   from: bastion1
+    #   automation:  {hostname: localhost, port: 45985, protocol: winrm, preestablished: true}
+    #   interactive: {hostname: localhost, port: 44001, protocol: rdp,   preestablished: true}
+
+hosts:
+  linux-app01:
+    role: target
+    kind: linux
+    username: appuser
+    description: Linux application server
+    tags: [linux, qa]
+    context:
+      environment: QA
+      datacenter: East
+      network_zone: Internal
+      owner: AppOps
+    via:
+      from: bastion1
+      hostname: linux-app01.corp.net   # address as seen FROM bastion1
+      port: 22
+      protocol: ssh
+
+  win-app01:
+    role: target
+    kind: windows
+    username: svc_deploy
+    domain: corp
+    description: Windows application server
+    tags: [windows, windows-2019, qa]
+    context:
+      environment: QA
+      datacenter: East
+      network_zone: Internal
+      owner: AppOps
+    auth:
+      transport: ntlm
+    via:
+      from: jump1
+      automation:
+        hostname: win-app01.corp.net   # address as seen FROM jump1
+        port: 5985
+        protocol: winrm
+      interactive:
+        hostname: win-app01.corp.net
+        port: 3389
+        protocol: rdp
+
+# ---------------------------------------------------------------------------
+# OLDER SPELLINGS -- still accepted, no longer the recommended shape
+#
+# A standalone `routes:` list of {source, target, hostname, port, protocol}
+# edges, and a per-host `path: [bastion1, jump1]` shorthand that uses each
+# node's own `hostname`/`port`, both still load and compile to the same graph.
+#
+# They cannot be combined with `via:` in one file -- connectivity declared in
+# two places is refused at load time, which is the mistake `via:` exists to
+# make impossible.
+# ---------------------------------------------------------------------------

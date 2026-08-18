@@ -1,0 +1,41 @@
+# A minimal, real brief: read-only health check on the verified AIX host.
+#
+# Nothing here changes state, so it is the safest thing to try first and the
+# best way to see the whole flow work end to end.
+#
+#   uv run ac brief validate config\briefs\example-aix-health.yaml
+#   uv run ac connect aix-target01          # in your own terminal
+#   uv run ac brief run config\briefs\example-aix-health.yaml
+
+brief:
+  id: TB-EXAMPLE-HEALTH
+  title: Read-only health snapshot of the AIX GIS host
+  host: hostname
+  requested_by: user
+  description: >-
+    Confirms the toolchain works end to end against a real host without changing
+    anything. Use it to validate a new inventory entry, or as a smoke test after
+    a network change.
+
+preflight:
+  # The host reports itself as aix-target01. If a route or tunnel is ever
+  # misconfigured, this is what catches it before any command runs.
+  expect_hostname: aix-target01
+  require_free_disk_gb: 0.5
+
+operations:
+  - operation: linux-health
+    on_failure: stop
+
+success_criteria:
+  - Hostname reported is hostname
+  - Filesystem table is returned (AIX df has no -h flag; -k is used)
+  - Load average and uptime are plausible
+
+must_not:
+  - Change anything at all -- this brief is read-only
+
+rules:
+  confirm_destructive: true
+  reboot_allowed: false
+  max_duration_minutes: 10

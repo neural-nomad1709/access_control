@@ -1,0 +1,26 @@
+# A read-only health snapshot. Safe to fan out across the whole Windows fleet:
+# no gated or destructive operations, so a campaign can run it unattended once
+# the sessions are open. Reusable as a template -- a campaign target overrides
+# `host:` to point this same brief at any Windows host.
+brief:
+  id: qa-health
+  title: QA Windows health snapshot
+  host: win-target01-dev
+  requested_by: operator
+  change_ref: DEMO-HEALTH
+  description: >-
+    Read-only disk / memory / uptime / failed-service snapshot. Changes nothing.
+
+operations:
+  - operation: windows-health
+
+preflight:
+  # Guards against a stale/reused forward pointing the brief at the wrong box.
+  expect_hostname: DEV12044
+
+success_criteria:
+  - "disk, memory, uptime and failed services reported for the host"
+
+rules:
+  reboot_allowed: false
+  confirm_destructive: true
