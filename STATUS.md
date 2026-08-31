@@ -9,7 +9,7 @@ without re-deriving it._
 | Tests | **341 passing** (`uv run pytest`, fully offline, ~27 s) |
 | Source | ~11 000 lines across 27 modules in `src/access_control` |
 | Documentation | Complete as of the 2026-08-17 audit — see [docs/README.md](docs/README.md) |
-| Version control | One commit (`2a5fd70`) on `main`. **`src/access_control/credentials.py` is untracked** — `.gitignore`'s `*credential*` excludes it; see [2026-08-20 follow-ups](#follow-ups-owed-from-this-session) |
+| Version control | On `main`, pushed to GitHub. `src/access_control/credentials.py` is tracked — the old `*credential*` ignore pattern was narrowed to credential material only (`credentials.json`, `*credentials.y*ml`, `*credentials.txt`); see [2026-08-20 follow-ups](#follow-ups-owed-from-this-session) |
 
 ---
 
@@ -93,7 +93,7 @@ operator
 
 | Item | Why |
 |---|---|
-| **`.gitignore:15` `*credential*` excludes `src/access_control/credentials.py`** | A core source module is **untracked and absent from the initial commit**; fixes B and C exist only on disk. The pattern is aimed at secrets (`credentials.json`). Narrow it, e.g. `credentials.json` / `*credentials.y*ml`, and add an explicit `!src/access_control/credentials.py` |
+| ~~`.gitignore` `*credential*` excludes `src/access_control/credentials.py`~~ **Done** | The blanket pattern was narrowed to credential material (`credentials.json`, `*credentials.y*ml`, `*credentials.txt`) and `credentials.py` is now tracked and committed |
 | Audit the estate for `domain:` on non-Windows nodes | Defect A is latent on `AppProd02` and any future Linux entry copied from a Windows one. `ac doctor` could flag `domain:` on `kind: linux` |
 | Regression tests for B and C | Both are pure-logic: caption length clamp, and EOF-to-dialog delegation. Neither needs a host |
 | `ac timeline SES-000046` reports "no audit trail" | The log file exists at the path `ac status` prints; the lookup does not find it by session id |

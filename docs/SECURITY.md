@@ -281,7 +281,10 @@ nor the target password.
 | `transport.log` | Redacted, but may name hosts and ports |
 
 `.gitignore` blocks `*.key`, `*.pem`, `*.ppk`, `*.pfx`, `*.p12`, `.env*`,
-`secrets*`, `*credential*`, `*password*`, `logs/` and `*.jsonl`.
+`secrets*`, `credentials.json`, `*credentials.y*ml`, `*credentials.txt`,
+`*password*`, `logs/` and `*.jsonl`. (The old blanket `*credential*` also
+matched `src/access_control/credentials.py` and kept a source module out of
+the repository; the patterns above target credential *material* only.)
 
 ---
 
