@@ -47,6 +47,14 @@ class ServableSession:
         self.touched = 0
         self.closed_with: str | None = None
         self.commands: list[str] = []
+        # the preflight checks read these
+        self.ssh_hops: list[Any] = []
+        self.host = type("Host", (), {"is_windows": False})()
+        self.idle_timeout_s = 1800
+        self.idle_s = 0.0
+
+    def require_active(self) -> None:
+        pass
 
     def touch(self) -> None:
         self.touched += 1
@@ -148,6 +156,42 @@ class TestDescriptors:
         ).write()
         assert attach("ghost") is None
         assert read_descriptor("ghost") is None
+
+
+class RecordingAudit:
+    """Captures audit actions so a test can assert what the trail records."""
+
+    def __init__(self) -> None:
+        self.records: list[tuple[str, dict[str, Any]]] = []
+
+    def action(self, action: str, **fields: Any) -> None:
+        self.records.append((action, fields))
+
+
+class TestPreflightAuditPhase:
+    """A postcheck runs through the preflight handler; the audit trail must
+    say which phase the checks belong to, or a post-change verification is
+    indistinguishable from a pre-change one."""
+
+    def _preflight_record(self, session: ServableSession) -> dict[str, Any]:
+        assert isinstance(session.audit, RecordingAudit)
+        records = [f for a, f in session.audit.records if a == "PREFLIGHT"]
+        assert len(records) == 1
+        return records[0]
+
+    def test_default_call_is_recorded_as_the_preflight_phase(self) -> None:
+        session = ServableSession()
+        session.audit = RecordingAudit()
+        with RunningServer(session) as (client, _):
+            client.call("preflight", spec={})
+        assert self._preflight_record(session)["phase"] == "preflight"
+
+    def test_postcheck_phase_reaches_the_audit_trail(self) -> None:
+        session = ServableSession()
+        session.audit = RecordingAudit()
+        with RunningServer(session) as (client, _):
+            client.call("preflight", spec={}, phase="postcheck")
+        assert self._preflight_record(session)["phase"] == "postcheck"
 
 
 class TestProtocol:

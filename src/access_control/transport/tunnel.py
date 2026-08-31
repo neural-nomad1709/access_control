@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import select
 import socket
+import sys
 import threading
 from typing import TYPE_CHECKING
 
@@ -58,7 +59,13 @@ class LocalTunnel:
             return self.local_port
 
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if sys.platform == "win32":
+            # Exclusive bind: a busy port errors instead of being shared, and
+            # no other local process can later steal this credentialed forward
+            # out from under us (plain SO_REUSEADDR permits both on Windows).
+            server.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             server.bind((self.bind_address, self._requested_port))
         except OSError as exc:

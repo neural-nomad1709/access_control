@@ -128,8 +128,12 @@ class TestPostcheckExecution:
         assert {"expect_service_running": ["W3SVC"]} in specs, (
             f"postcheck spec never reached the daemon; preflight calls seen: {specs}"
         )
-        # order: preflight first, operations, then postcheck last
-        assert client.calls[-1][0] == "preflight"
+        # order: preflight first, operations, then postcheck last — and the
+        # postcheck call is marked as such, so the audit trail can tell a
+        # post-change verification from a pre-change one
+        method, kwargs = client.calls[-1]
+        assert method == "preflight"
+        assert kwargs.get("phase") == "postcheck"
 
     def test_postcheck_failure_fails_the_brief(
         self, brief_env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

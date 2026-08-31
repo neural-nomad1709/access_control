@@ -816,11 +816,7 @@ def brief_run(
     if not skip_preflight:
         report = client.call("preflight", spec=dict(brief.preflight))
         if not report["ok"]:
-            for check in report["checks"]:
-                if not check["passed"]:
-                    _raw(f"  {check['name']}: {check['detail']}", "red")
-                    if check.get("remedy"):
-                        _raw(f"    -> {check['remedy']}", "yellow")
+            _print_failed_checks(report)
             _fail(
                 f"preflight failed for brief '{brief.id}'. Nothing was run.\n"
                 f"Fix the blockers above, or run `uv run ac verify {brief.host}` to re-check."
@@ -876,18 +872,16 @@ def brief_run(
     # would only bury the real failure.
     postcheck_report: dict[str, Any] | None = None
     if brief.postcheck and not failed:
-        postcheck_report = client.call("preflight", spec=dict(brief.postcheck))
+        postcheck_report = client.call(
+            "preflight", spec=dict(brief.postcheck), phase="postcheck"
+        )
         if postcheck_report["ok"]:
             console.print(
                 f"[green]postcheck passed[/green] ({len(postcheck_report['checks'])} checks)"
             )
         else:
             failed = True
-            for check in postcheck_report["checks"]:
-                if not check["passed"]:
-                    _raw(f"  {check['name']}: {check['detail']}", "red")
-                    if check.get("remedy"):
-                        _raw(f"    -> {check['remedy']}", "yellow")
+            _print_failed_checks(postcheck_report)
             _raw(f"postcheck failed for brief '{brief.id}': the change ran, but did not verify.", "red")
 
     payload = {
@@ -1593,6 +1587,15 @@ def _print_result(result: dict[str, Any]) -> None:
     for stream, colour in (("ps_warnings", "yellow"), ("ps_verbose", "dim")):
         for line in result.get(stream) or []:
             _raw(line, colour)
+
+
+def _print_failed_checks(report: dict[str, Any]) -> None:
+    """Print the failing checks from a preflight/postcheck report, with remedies."""
+    for check in report["checks"]:
+        if not check["passed"]:
+            _raw(f"  {check['name']}: {check['detail']}", "red")
+            if check.get("remedy"):
+                _raw(f"    -> {check['remedy']}", "yellow")
 
 
 def _print_operation(result: dict[str, Any]) -> None:

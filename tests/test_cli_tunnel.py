@@ -151,6 +151,27 @@ class TestTunnelPortPropagation:
         assert session is not None and session.open_tunnel_kwargs is not None
         assert session.open_tunnel_kwargs["local_port"] == REQUESTED_PORT
 
+    def test_a_busy_port_is_a_clear_error_not_a_silent_substitute(self) -> None:
+        """The documented contract: a requested port that cannot be bound raises
+        ConnectionFailed. On Windows a plain SO_REUSEADDR bind can silently
+        steal a port another process is listening on, so this proves the
+        exclusive-bind behaviour on every platform CI runs."""
+        import socket
+
+        from access_control.errors import ConnectionFailed
+        from access_control.transport.tunnel import LocalTunnel
+
+        occupant = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        occupant.bind(("127.0.0.1", 0))
+        occupant.listen(1)
+        busy_port = occupant.getsockname()[1]
+        try:
+            tunnel = LocalTunnel(None, "10.0.0.99", 22, local_port=busy_port)
+            with pytest.raises(ConnectionFailed):
+                tunnel.start()
+        finally:
+            occupant.close()
+
     def test_no_misleading_unavailable_note_when_port_is_honoured(
         self, config_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

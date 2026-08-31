@@ -377,8 +377,14 @@ class SessionServer:
     def do_status(self) -> dict[str, Any]:
         return self.session.status()
 
-    def do_preflight(self, spec: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Verify the connection is live and pointed at the right machine."""
+    def do_preflight(
+        self, spec: dict[str, Any] | None = None, phase: str = "preflight"
+    ) -> dict[str, Any]:
+        """Verify the connection is live and pointed at the right machine.
+
+        ``phase`` names what the checks are for — "preflight" before a change,
+        "postcheck" after one — so the audit trail can tell them apart.
+        """
         self.session.touch()
         report = run_preflight(self.session, spec or {})
         if self.session.audit:
@@ -386,7 +392,8 @@ class SessionServer:
                 "PREFLIGHT",
                 target=self.session.host_id,
                 result="SUCCESS" if report.ok else "FAILURE",
-                detail=f"{len(report.checks)} check(s), {len(report.blockers)} blocker(s)",
+                detail=f"{phase}: {len(report.checks)} check(s), {len(report.blockers)} blocker(s)",
+                phase=phase,
                 checks=[c.to_dict() for c in report.checks],
             )
         return report.to_dict()
