@@ -73,8 +73,8 @@ driving a live session.
 
 | # | Item | Detail | Severity | Suggested fix |
 |---|---|---|---|---|
-| F-07 | **`ac tunnel --port` is silently ignored** | Neither the attached-session path nor the ephemeral path passes `local_port` through. The ephemeral path then prints *"the requested port was unavailable"*, which is misleading — it was never requested | Medium | Pass `local_port` in both paths; keep the warning only when a bind genuinely fell back |
-| F-08 | **`postcheck:` in a brief is never executed** | Parsed, validated, returned by `ac brief show --json`, then dropped | Medium | Run it after the operations (it has the same shape as `preflight`), or reject the key so nobody relies on it |
+| F-07 | ~~**`ac tunnel --port` is silently ignored**~~ **Resolved 2026-08-31** | Both paths now pass `local_port` through; the misleading "unavailable" note is gone — a busy port raises `ConnectionFailed` instead of silently substituting another | — | Regression tests in `test_cli_tunnel.py` |
+| F-08 | ~~**`postcheck:` in a brief is never executed**~~ **Resolved 2026-08-31** | `postcheck:` now runs through the same daemon handler as `preflight` after every operation succeeds; a failing postcheck fails the brief (exit 2); skipped when the brief already failed | — | Regression tests in `test_cli_brief_postcheck.py` |
 | F-09 | **"Not reached" in an operation report is dead code** | `report_markdown` filters `self.steps` against a set built from `self.steps` — always empty, so steps skipped after a failure are never listed | Low | Compare against the operation's full step list |
 | F-10 | **`ac shell` / `ac rdp` use the node's own `host`/`port`, not the resolved route leg** | `ac tunnel` correctly uses `route.leg_for(node)`. For a node with multiple `via:` blocks, or an explicit `hostname:` differing from its leg, these can dial a different address than the route declares | Low | Resolve the leg in all three commands |
 | F-11 | **`rules.max_duration_minutes` and `brief.window` are not enforced** | Recorded and rendered only | Low (documented) | Enforce a wall-clock ceiling in `ac brief run`, or document them as advisory in the template too |

@@ -110,8 +110,8 @@ Tracked for triage in [../BugFixNchange.md](../BugFixNchange.md).
 
 | # | Gap | Detail | Severity |
 |---|---|---|---|
-| F-07 | `ac tunnel --port` is silently ignored | Neither the attached-session path (`client.call("open_tunnel", …)` omits `local_port`) nor the ephemeral path passes the requested port through. The ephemeral path then compares the bound port with the requested one and prints *"the requested port was unavailable"* — which is misleading, because it was never requested | Medium |
-| F-08 | `postcheck:` in a brief is parsed but never executed | It is validated as a mapping, returned by `ac brief show --json`, and then dropped. A reader would reasonably expect it to run | Medium |
+| F-07 | `ac tunnel --port` is silently ignored | **Resolved 2026-08-31**: both CLI paths pass `local_port` through; a busy port now raises `ConnectionFailed` rather than silently substituting another. Regression tests in `test_cli_tunnel.py` | — |
+| F-08 | `postcheck:` in a brief is parsed but never executed | **Resolved 2026-08-31**: runs via the same daemon handler as `preflight` after the operations succeed; failure fails the brief. Regression tests in `test_cli_brief_postcheck.py` | — |
 | F-09 | "Not reached" in an operation report is dead code | `report_markdown` computes `reached = {s.step_id for s in self.steps}` and then filters `self.steps` for ids *not* in that set — always empty. Steps skipped after a failure are never listed | Low |
 | F-10 | `ac shell` and `ac rdp` use the node's own `host`/`port` rather than the resolved route leg | `ac tunnel` correctly uses `route.leg_for(node)`. For a node with multiple `via:` blocks, or an explicit `hostname:` that differs from its leg, these two can dial a different address than the route says | Low |
 | F-11 | `rules.max_duration_minutes` and `brief.window` are not enforced | Recorded and rendered only | Low (documented) |

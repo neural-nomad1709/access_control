@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    name: test suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is the platform operators actually run this from (pywin32,
+        # CredUI); Linux covers the SSH/paramiko path and keeps CI honest
+        # about accidental platform assumptions. The suite is fully offline.
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install the project
+        run: uv sync --frozen
+
+      - name: Test suite
+        run: uv run pytest

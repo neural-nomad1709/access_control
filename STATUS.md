@@ -6,7 +6,7 @@ without re-deriving it._
 | | |
 |---|---|
 | Version | `0.1.0` |
-| Tests | **341 passing** (`uv run pytest`, fully offline, ~27 s) |
+| Tests | **348 passing** (`uv run pytest`, fully offline, ~25 s) |
 | Source | ~11 000 lines across 27 modules in `src/access_control` |
 | Documentation | Complete as of the 2026-08-17 audit — see [docs/README.md](docs/README.md) |
 | Version control | On `main`, pushed to GitHub. `src/access_control/credentials.py` is tracked — the old `*credential*` ignore pattern was narrowed to credential material only (`credentials.json`, `*credentials.y*ml`, `*credentials.txt`); see [2026-08-20 follow-ups](#follow-ups-owed-from-this-session) |
@@ -180,7 +180,7 @@ is the bastion. Worth a policy conversation before direct routes become the norm
 | Command deny-list (two tiers, comment-aware) | Complete |
 | Interactive handoff (`ac rdp`, `ac shell`, `ac tunnel`) | Complete; RDP launches are not audited |
 | Documentation | Complete as of 2026-08-17 |
-| CI, linting, type checking, coverage gates | **None** |
+| CI, linting, type checking, coverage gates | GitHub Actions runs the suite on Ubuntu + Windows (2026-08-31); lint/type/coverage still **none** |
 | RBAC, SSO, credential broker, unattended runs | **Not built, by design** |
 
 ---
@@ -213,11 +213,11 @@ Ordered. Full detail and suggested fixes in
 
 | # | Item |
 |---|---|
-| 9 | Fix `ac tunnel --port`, silently ignored, with a misleading warning (F-07) |
-| 10 | Run `postcheck:` in a brief, or reject the key so nobody relies on it (F-08) |
+| 9 | ~~Fix `ac tunnel --port`, silently ignored, with a misleading warning (F-07)~~ **Done 2026-08-31** |
+| 10 | ~~Run `postcheck:` in a brief, or reject the key so nobody relies on it (F-08)~~ **Done 2026-08-31** |
 | 11 | Apply `logging.level` or remove it (F-05) |
 | 12 | Rotate `transport.log` and `errors.log` (F-06) |
-| 13 | Add CI running `uv run pytest`, plus ruff and mypy (F-20, F-21, F-22) |
+| 13 | Add CI running `uv run pytest` (**done 2026-08-31**, Ubuntu + Windows), plus ruff and mypy (still open — F-20, F-21, F-22) |
 | 14 | Remove the stray files: `New Text Document.txt`, `disconnect`, `config/inventory copy.yaml`, `config/inventory_Orig_Copy.yaml` (F-24) |
 | 15 | Wire up or delete the dead code — `discard_after_auth`, `direct_allowed`, three unused event constants, `extra_rules` (F-14 … F-18; F-19 resolved 2026-08-31) |
 
