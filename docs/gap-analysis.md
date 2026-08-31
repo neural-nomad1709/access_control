@@ -127,7 +127,7 @@ Tracked for triage in [../BugFixNchange.md](../BugFixNchange.md).
 | F-16 | `EV_HOP_CONNECTED`, `EV_TRANSFER`, `EV_RDP` | Declared event constants that nothing emits |
 | F-17 | `safety.classify/check(extra_rules=…)` | An extension point with no caller |
 | F-18 | `Route.is_direct`, `Route.nested_chain`, `Route.psrp_entry`, `Inventory.node_context` | Unused helpers |
-| F-19 | `context._next_sequence(width=…)` | The parameter is accepted and immediately `del`eted |
+| F-19 | `context._next_sequence(width=…)` | **Resolved 2026-08-31**: the function was removed; session/agent ids now use a random suffix instead of a persisted counter, which also removes the cross-process race on `state/*.seq` |
 
 ### 3.4 Engineering hygiene
 

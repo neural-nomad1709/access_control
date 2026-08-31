@@ -276,7 +276,6 @@ to read, and there is no record of what was run.
 | `config/*.yaml` (inventory, operations, briefs, campaigns) | **Version control.** This is the only irreplaceable state | `git checkout` |
 | `<log dir>/*.jsonl` and `*.md` | Copy to your evidence store before retention prunes them | Read-only artefacts; nothing to restore into |
 | `~/.ssh` keys and `known_hosts` | Your existing key-management process | Restore the files; re-verify fingerprints |
-| `<root>/state/*.seq` | Not worth backing up | Counters restart from 0; ids stay unique because `trace_id` carries a UTC timestamp |
 | `<root>/sessions/*.json` | **Never.** Ephemeral tokens | Delete stale ones |
 | `.venv` | No | `uv sync` |
 

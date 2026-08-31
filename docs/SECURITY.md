@@ -329,7 +329,7 @@ termination still leaves a complete trail up to the last action.
 
 ```json
 {"timestamp": "2026-08-12T09:15:22.431+00:00", "seq": 14,
- "agentId": "AGT-20260812-001", "sessionId": "SES-845921",
+ "agentId": "AGT-20260812-3f9a1c", "sessionId": "SES-3f9a1c",
  "host_id": "linux-app01", "event": "ssh.connect", "action": "SSH_CONNECT",
  "source": "JumpServer01", "target": "linux-app01", "result": "SUCCESS",
  "endpoint": "10.20.4.20:22", "channel": "ssh", "username": "appuser",

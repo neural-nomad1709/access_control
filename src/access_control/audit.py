@@ -84,14 +84,20 @@ def new_session_id() -> str:
 
 
 def default_agent_id() -> str:
-    """Identify who is driving: an explicit id, or user@host as a fallback."""
+    """Identify who is driving: an explicit id, or user@host as a fallback.
+
+    The fallback carries a random suffix: ten agents on one machine would
+    otherwise all be ``claude-code@HOST`` -- indistinguishable in the trail,
+    which is the one thing an agent id must never be.
+    """
     explicit = os.environ.get("AC_AGENT_ID")
     if explicit:
         return explicit
+    suffix = uuid.uuid4().hex[:6]
     if os.environ.get("CLAUDECODE") or os.environ.get("CLAUDE_CODE"):
-        return f"claude-code@{socket.gethostname()}"
+        return f"claude-code@{socket.gethostname()}-{suffix}"
     user = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
-    return f"{user}@{socket.gethostname()}"
+    return f"{user}@{socket.gethostname()}-{suffix}"
 
 
 @dataclass
@@ -103,8 +109,7 @@ class AuditLog:
     host_id: str | None = None
     directory: Path | None = None
     #: Filename-safe, sortable id. The operator-facing ``session_id``
-    #: (``SES-845921``) is not sortable, and two sessions could in principle
-    #: reuse it after the counter wraps, so files are named by this instead.
+    #: (``SES-3f9a1c``) is not sortable, so files are named by this instead.
     trace_id: str | None = None
     enabled: bool = True
 
@@ -159,8 +164,8 @@ class AuditLog:
         be filtered by ``action`` and correlated by ``source``/``target``
         without parsing free text::
 
-            {"timestamp": "...", "agentId": "AGT-20260812-001",
-             "sessionId": "SES-845921", "action": "SSH_CONNECT",
+            {"timestamp": "...", "agentId": "AGT-20260812-3f9a1c",
+             "sessionId": "SES-3f9a1c", "action": "SSH_CONNECT",
              "source": "JumpServer01", "target": "linux-app01",
              "result": "SUCCESS"}
 

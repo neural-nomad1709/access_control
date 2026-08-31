@@ -29,7 +29,6 @@ captured server output must not be uploaded.
 | App data root | `%LOCALAPPDATA%\access_control` | `$XDG_DATA_HOME/access_control` or `~/.local/share/access_control` (macOS: `~/Library/Application Support/access_control`) | `AC_DATA_DIR` |
 | Audit logs & summaries | `<root>\logs` | `<root>/logs` | `logging.path`, then `AC_LOG_DIR` |
 | Live session descriptors | `<root>\sessions` | `<root>/sessions` | via `AC_DATA_DIR` |
-| Sequence counters | `<root>\state` | `<root>/state` | via `AC_DATA_DIR` |
 | Config directory | `<repo>\config` | `<repo>/config` | `AC_CONFIG_DIR`, or `AC_HOME` (repo root) |
 | Known hosts | `~/.ssh/known_hosts` | same | `AC_KNOWN_HOSTS` |
 
@@ -105,11 +104,13 @@ routes:  [...]      # older alternative to per-node `via:` — cannot be combine
 
 | Key | Default | Produces |
 |---|---|---|
-| `id_prefix` (alias `prefix`) | `AGT` | `AGT-20260812-001`, one per run per day |
-| `session_prefix` | `SES` | `SES-000001`, one per authenticated path (counter wraps at 1 000 000) |
+| `id_prefix` (alias `prefix`) | `AGT` | `AGT-20260812-3f9a1c`, one per run |
+| `session_prefix` | `SES` | `SES-3f9a1c`, one per authenticated path |
 
-Both come from a small persisted counter under `<root>/state`. `AC_AGENT_ID`
-overrides the generated agent id outright.
+The suffix is random (6 hex chars), so concurrent sessions on one machine never
+share an id — there is no persisted counter and nothing to race on. An explicit
+id wins outright: `ac connect --agent-id`, then the `AC_AGENT_ID` environment
+variable, then the generated form.
 
 ### 3.3 Node fields (`hops:` and `hosts:` take the same shape)
 

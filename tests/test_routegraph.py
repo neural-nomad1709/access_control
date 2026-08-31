@@ -581,7 +581,7 @@ class TestAgentIdentity:
         assert identity.agent_id.startswith("AGT-")
         assert len(identity.agent_id.split("-")) == 3
         assert identity.session_id.startswith("SES-")
-        assert len(identity.session_id) == len("SES-000001")
+        assert len(identity.session_id) == len("SES-3f9a1c")
 
     def test_each_run_gets_a_distinct_identity(self, tmp_path: Path, monkeypatch) -> None:
         """Concurrent runs must be separable in the trail."""
@@ -591,6 +591,15 @@ class TestAgentIdentity:
         sessions = {AgentIdentity.create().session_id for _ in range(3)}
         assert len(ids) == 3
         assert len(sessions) == 3
+
+    def test_same_second_runs_get_distinct_trace_ids(self, tmp_path: Path, monkeypatch) -> None:
+        """Log files are named by trace_id; a collision would interleave two
+        sessions' audit trails in one file.  Many creations inside the same
+        second must therefore never share one."""
+        monkeypatch.setenv("AC_DATA_DIR", str(tmp_path))
+        monkeypatch.delenv("AC_AGENT_ID", raising=False)
+        traces = [AgentIdentity.create().trace_id for _ in range(50)]
+        assert len(set(traces)) == 50
 
     def test_an_explicit_agent_id_is_honoured(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setenv("AC_DATA_DIR", str(tmp_path))

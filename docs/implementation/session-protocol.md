@@ -37,12 +37,12 @@ The host id is sanitised by replacing every character that is not alphanumeric,
 {
   "version": 1,
   "host_id": "win-app01",
-  "session_id": "SES-845921",
+  "session_id": "SES-3f9a1c",
   "port": 53187,
   "token": "<43-char urlsafe base64, 256 bits>",
   "pid": 18244,
   "started": 1755000920.13,
-  "agent_id": "AGT-20260812-001"
+  "agent_id": "AGT-20260812-3f9a1c"
 }
 ```
 
@@ -146,7 +146,7 @@ idle timer.
 
 ```json
 {
-  "session_id": "SES-845921", "agent_id": "AGT-20260812-001", "host_id": "win-app01",
+  "session_id": "SES-3f9a1c", "agent_id": "AGT-20260812-3f9a1c", "host_id": "win-app01",
   "elapsed_s": 282.6, "records": 23,
   "steps_run": 3, "steps_ok": 2, "steps_failed": 1, "errors": 0, "blocked": 0,
   "log_file": "…/20260812T091520Z-845921.jsonl",

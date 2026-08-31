@@ -7,9 +7,12 @@ to every node.  The route resolver uses it to enforce compliance boundaries: a
 QA bastion must not become a path into PROD just because the graph happens to
 connect.
 
-**Agent identity** -- a per-run ``AGT-<date>-<seq>`` and a per-session
-``SES-<seq>``.  A single static agent id makes concurrent runs indistinguishable
-in the audit trail, which is exactly when you most need to tell them apart.
+**Agent identity** -- a per-run ``AGT-<date>-<suffix>`` and a per-session
+``SES-<suffix>``.  A single static agent id makes concurrent runs
+indistinguishable in the audit trail, which is exactly when you most need to
+tell them apart.  The suffixes are random rather than counted: uniqueness must
+hold across concurrent processes, and a shared counter file cannot promise that
+without cross-process locking -- randomness needs no coordination at all.
 
 **Logging configuration** -- location, level and retention, declared in config
 rather than hardcoded, so logs can be pointed at a collected directory for SIEM
@@ -20,13 +23,13 @@ from __future__ import annotations
 
 import os
 import re
-import threading
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from .paths import app_data_dir, ensure_dir
+from .paths import ensure_dir
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 DEFAULT_RETENTION_DAYS = 30
@@ -104,34 +107,13 @@ class NetworkContext:
 # Agent identity
 # --------------------------------------------------------------------------
 
-_counter_lock = threading.Lock()
-
-
-def _next_sequence(name: str, width: int, modulo: int | None = None) -> int:
-    """A small persisted counter, so ids are stable and increasing per machine."""
-    path = ensure_dir(app_data_dir() / "state") / f"{name}.seq"
-    with _counter_lock:
-        try:
-            current = int(path.read_text(encoding="utf-8").strip() or "0")
-        except (OSError, ValueError):
-            current = 0
-        nxt = current + 1
-        if modulo:
-            nxt = nxt % modulo or 1
-        try:
-            path.write_text(str(nxt), encoding="utf-8")
-        except OSError:
-            pass
-        del width
-        return nxt
-
 
 @dataclass(frozen=True)
 class AgentIdentity:
     """Who is acting, and under which session.
 
-    ``agent_id`` identifies the running agent instance (``AGT-20260812-001``);
-    ``session_id`` identifies one authenticated path (``SES-845921``).  Both
+    ``agent_id`` identifies the running agent instance (``AGT-20260812-3f9a1c``);
+    ``session_id`` identifies one authenticated path (``SES-3f9a1c``).  Both
     appear on every audit record so concurrent runs stay separable.
     """
 
@@ -152,15 +134,14 @@ class AgentIdentity:
         stamp = datetime.now(timezone.utc)
         day = stamp.strftime("%Y%m%d")
 
-        if explicit:
-            resolved_agent = explicit
-        else:
-            seq = _next_sequence(f"agent-{day}", width=3)
-            resolved_agent = f"{prefix}-{day}-{seq:03d}"
-
-        session_seq = _next_sequence("session", width=6, modulo=1_000_000)
-        session = f"{session_prefix}-{session_seq:06d}"
-        trace = f"{stamp.strftime('%Y%m%dT%H%M%SZ')}-{session_seq:06d}"
+        # One random suffix ties the session's ids together.  Random, not a
+        # persisted counter: ten sessions launched in the same second by ten
+        # independent processes must never share an id, and the log file is
+        # named by trace_id -- a collision would interleave two audit trails.
+        suffix = uuid.uuid4().hex[:6]
+        resolved_agent = explicit or f"{prefix}-{day}-{suffix}"
+        session = f"{session_prefix}-{suffix}"
+        trace = f"{stamp.strftime('%Y%m%dT%H%M%SZ')}-{suffix}"
         return cls(agent_id=resolved_agent, session_id=session, trace_id=trace)
 
     def to_dict(self) -> dict[str, str]:

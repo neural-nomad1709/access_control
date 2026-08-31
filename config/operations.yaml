@@ -19,6 +19,16 @@
 # Exit codes are resolved for you: a native tool's $LASTEXITCODE, or 1 if the
 # script threw. See docs/implementation.md for how that works.
 # ---------------------------------------------------------------------------
+# install --xxxx
+  # 
+  # 1. install D:\Utility\Obsidian-1.13.7.exe
+  # 2. ask question when installation requires input.
+  # 3. check the logs post installation of Obsidian and confirm everything is fine.
+  # 4. share a report post installation in /report directory.
+
+# ---------------------------------------------------------------------------
+
+
 
 operations:
 

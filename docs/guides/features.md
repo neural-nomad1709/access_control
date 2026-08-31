@@ -707,8 +707,8 @@ catches everything.
 Every action is one JSON object, written and `fsync`ed immediately:
 
 ```json
-{"timestamp": "2026-08-12T09:15:22.431+00:00", "agentId": "AGT-20260812-001",
- "sessionId": "SES-845921", "action": "SSH_CONNECT",
+{"timestamp": "2026-08-12T09:15:22.431+00:00", "agentId": "AGT-20260812-3f9a1c",
+ "sessionId": "SES-3f9a1c", "action": "SSH_CONNECT",
  "source": "JumpServer01", "target": "linux-app01", "result": "SUCCESS"}
 ```
 
@@ -716,9 +716,11 @@ Sixteen action types cover connect, authenticate, execute, transfer, collect,
 block, and terminate. Identity fields use canonical spellings so the trail drops
 into a SIEM without a transform step.
 
-**Per-run identity.** `AGT-<date>-<seq>` per agent instance, `SES-<seq>` per
-session. A single static id makes concurrent executions indistinguishable — which
-is precisely when telling them apart matters.
+**Per-run identity.** `AGT-<date>-<suffix>` per agent instance, `SES-<suffix>`
+per session, with a random suffix so concurrent runs on one machine never share
+an id. A single static id makes concurrent executions indistinguishable — which
+is precisely when telling them apart matters. Name a run explicitly with
+`ac connect --agent-id` or `AC_AGENT_ID`.
 
 **Execution timeline.** `ac timeline <session>`:
 

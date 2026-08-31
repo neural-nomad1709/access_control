@@ -1,12 +1,12 @@
 # STATUS — access_control
 
-_Last updated: **2026-08-20**. Purpose: hand a fresh session the current state
+_Last updated: **2026-08-31**. Purpose: hand a fresh session the current state
 without re-deriving it._
 
 | | |
 |---|---|
 | Version | `0.1.0` |
-| Tests | **340 passing** (`uv run pytest`, fully offline, ~27 s) |
+| Tests | **341 passing** (`uv run pytest`, fully offline, ~27 s) |
 | Source | ~11 000 lines across 27 modules in `src/access_control` |
 | Documentation | Complete as of the 2026-08-17 audit — see [docs/README.md](docs/README.md) |
 | Version control | One commit (`2a5fd70`) on `main`. **`src/access_control/credentials.py` is untracked** — `.gitignore`'s `*credential*` excludes it; see [2026-08-20 follow-ups](#follow-ups-owed-from-this-session) |
@@ -100,6 +100,41 @@ operator
 
 ---
 
+## Change 2026-08-31 — concurrent-session identity
+
+Prompted by a design question rather than a failure: *can ten agents work ten
+servers independently?* Runtime isolation was already sound — each `ac connect`
+is its own process, port, descriptor and engine — but **identity was not**.
+
+`context._next_sequence` guarded a file read-modify-write with a
+`threading.Lock`, which serialises threads inside one process and nothing at all
+across ten. Three consequences, none of which the offline suite could see
+because it never ran two processes at once:
+
+- Two sessions could take the same `SES-nnnnnn`.
+- Two starting in the same second could take the same `trace_id` — which **names
+  the log file**, so their audit trails interleaved in one `.jsonl`.
+- Without an explicit id, two independent agents could take the same
+  `AGT-<date>-<seq>`. `audit.default_agent_id()` was worse: every agent on one
+  host was `claude-code@HOST`.
+
+Fixed by removing the shared state rather than locking it — ids now carry a
+random 6-hex suffix and need no coordination (`SES-3f9a1c`, trace
+`20260812T091520Z-3f9a1c`). `_next_sequence` and the `state/*.seq` files are
+gone; the code is smaller than before. `ac connect --agent-id` was added so a
+run can be *named*, not merely unique. See [B-16 and C-12](BugFixNchange.md).
+
+Both arrangements now work with no configuration: one operator across ten
+servers (share an `AC_AGENT_ID`, separate by `sessionId`), or ten agents each
+owning one server (`--agent-id` per window — a shared `AC_AGENT_ID` in project
+settings would be actively wrong there).
+
+Unproven at scale: no test yet opens ten real concurrent sessions. The
+collision test spawns 50 identities inside one second, which covers the id
+generation but not the daemon under genuine parallel load.
+
+---
+
 ## The NTLM problem, and how it is solved
 
 Worth keeping, because it cost a day and looks exactly like a wrong password.
@@ -184,7 +219,7 @@ Ordered. Full detail and suggested fixes in
 | 12 | Rotate `transport.log` and `errors.log` (F-06) |
 | 13 | Add CI running `uv run pytest`, plus ruff and mypy (F-20, F-21, F-22) |
 | 14 | Remove the stray files: `New Text Document.txt`, `disconnect`, `config/inventory copy.yaml`, `config/inventory_Orig_Copy.yaml` (F-24) |
-| 15 | Wire up or delete the dead code — `discard_after_auth`, `direct_allowed`, three unused event constants, `extra_rules` (F-14 … F-19) |
+| 15 | Wire up or delete the dead code — `discard_after_auth`, `direct_allowed`, three unused event constants, `extra_rules` (F-14 … F-18; F-19 resolved 2026-08-31) |
 
 ### 4. Verification owed
 
@@ -214,7 +249,7 @@ Ordered. Full detail and suggested fixes in
   "undefined alias" error. Uncomment both, or make the entry standalone.
 - The two Axway field reports moved to [docs/reports/](docs/reports/) in the
   documentation audit. They analyse customer systems, not this project.
-- Audit trails, session descriptors and counters live under
+- Audit trails and session descriptors live under
   `%LOCALAPPDATA%\access_control\`, deliberately outside this OneDrive-synced
   repository.
 

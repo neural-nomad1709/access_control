@@ -219,8 +219,7 @@ workstation
   ├─ ~/.ssh/  keys + known_hosts          (per user, never in the repo)
   └─ %LOCALAPPDATA%\access_control\
        ├─ logs/      audit trails, summaries, transport.log, errors.log
-       ├─ sessions/  one 0600 descriptor per live session
-       └─ state/     agent and session counters
+       └─ sessions/  one 0600 descriptor per live session
 ```
 
 Running it in production — monitoring, backup, maintenance and upgrades — is in
@@ -334,19 +333,37 @@ verbatim.
 
 ## Auditing
 
-Each run gets its own identity — `AGT-20260812-001` for the agent instance,
-`SES-845921` for the session — so concurrent executions stay separable. Every
-action is appended as one JSON object:
+Each run gets its own identity — `AGT-20260812-3f9a1c` for the agent instance,
+`SES-3f9a1c` for the session — so concurrent executions stay separable. The
+suffixes are random, so ten sessions launched in the same second by independent
+processes never collide. Name the agent yourself with `ac connect --agent-id`
+or the `AC_AGENT_ID` environment variable. Every action is appended as one
+JSON object:
 
 ```json
-{"timestamp": "2026-08-12T09:15:22.431+00:00", "agentId": "AGT-20260812-001",
- "sessionId": "SES-845921", "action": "SSH_CONNECT",
+{"timestamp": "2026-08-12T09:15:22.431+00:00", "agentId": "AGT-20260812-3f9a1c",
+ "sessionId": "SES-3f9a1c", "action": "SSH_CONNECT",
  "source": "JumpServer01", "target": "linux-app01", "result": "SUCCESS"}
 ```
 
 `ac timeline <session>` renders the execution trace; `ac audit <session>` replays
 every record. A readable Markdown summary — including the timeline — is written
 when the session closes.
+
+### Many sessions at once
+
+One session is one host, held open by one `ac connect` process, so working
+across ten servers means ten of them. Two arrangements, and they want different
+agent ids:
+
+| | Agent id | Tell them apart by |
+|---|---|---|
+| **One operator, ten servers** | One shared id — set `AC_AGENT_ID`, or pass the same `--agent-id` to all ten as a batch tag | `sessionId` + `host_id` |
+| **Ten agents, ten servers** | One **per window** — `ac connect web01 --agent-id AGT-web01`. Do *not* put a shared `AC_AGENT_ID` in project settings; it would collapse all ten into one operator | `agentId` |
+
+Either way, nothing needs configuring for correctness: an unnamed run still gets
+a unique identity. `ac status` lists every live session regardless of which agent
+opened it.
 
 Location and retention are configurable, so trails can be collected for SIEM
 ingestion:

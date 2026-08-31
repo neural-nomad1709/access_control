@@ -381,6 +381,13 @@ def connect(
         help="Fail outright if the target leg fails, instead of holding the session "
         "at the last hop that authenticated.",
     ),
+    agent_id: Optional[str] = typer.Option(
+        None,
+        "--agent-id",
+        help="Agent id to record on every audit line for this session, e.g. a "
+        "per-window name (AGT-web01) or a batch tag. Overrides AC_AGENT_ID; "
+        "omit for a generated per-run id.",
+    ),
 ) -> None:
     """Open an authenticated session. Run this in your own terminal.
 
@@ -419,6 +426,7 @@ def connect(
             host,
             allowed_operations=allowed,
             idle_timeout_s=idle_timeout,
+            agent_id=agent_id,
             fallback_to_hop=not no_fallback,
         )
     except AccessControlError as exc:

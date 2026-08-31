@@ -570,8 +570,7 @@ operator workstation (Windows 11 / macOS / Linux)
   ├─ ~/.ssh/  private keys + known_hosts        (per user, never in the repo)
   └─ %LOCALAPPDATA%\access_control\
        ├─ logs/       audit trails, summaries, transport.log, errors.log
-       ├─ sessions/   one 0600 descriptor per live session
-       └─ state/      agent/session sequence counters
+       └─ sessions/   one 0600 descriptor per live session
 ```
 
 Scaling is per-operator, not per-server: two people running the tool are two

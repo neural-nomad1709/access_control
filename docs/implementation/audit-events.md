@@ -135,17 +135,17 @@ audit records: the operator gets one clean line and the traceback is appended to
 ## Worked example — one session's trail
 
 ```json
-{"timestamp":"2026-08-12T09:15:20.100+00:00","seq":1,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"session.open","host_id":"win-app01","action":"SESSION_START","source":"local","target":"win-app01","result":"SUCCESS","detail":"local -> bastion1 (ssh) -> jump1 (winrm) -> win-app01 (nested winrm)","route":"local -> bastion1 (ssh) -> jump1 (winrm) -> win-app01 (nested winrm)","hops":[...],"allowed_operations":["install-package"],"client_host":"WS-AK01","client_os":"Windows-11","pid":18244}
-{"timestamp":"2026-08-12T09:15:21.400+00:00","seq":2,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"hop.auth","host_id":"win-app01","hop_id":"bastion1","method":"publickey","username":"operator"}
-{"timestamp":"2026-08-12T09:15:23.900+00:00","seq":3,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"hop.auth","host_id":"win-app01","hop_id":"bastion1","method":"password","username":"operator"}
-{"timestamp":"2026-08-12T09:15:24.000+00:00","seq":4,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"ssh.connect","host_id":"win-app01","action":"SSH_CONNECT","source":"local","target":"bastion1","result":"SUCCESS","hop_id":"bastion1","endpoint":"bastion1.example.net:2222","channel":"ssh","username":"operator","auth_methods":["publickey","password"],"host_key":"known","preestablished":false,"duration_s":3.9}
-{"timestamp":"2026-08-12T09:15:24.200+00:00","seq":5,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"tunnel.open","host_id":"win-app01","hop_id":"bastion1","target":"10.20.4.11:5985","local_port":53001,"purpose":"winrm:jump1"}
-{"timestamp":"2026-08-12T09:15:24.210+00:00","seq":6,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"winrm.ntlm_provider","host_id":"win-app01","hop_id":"jump1","provider":"sspi","configured":"auto"}
-{"timestamp":"2026-08-12T09:15:26.800+00:00","seq":7,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"winrm.connect","host_id":"win-app01","action":"WINRM_CONNECT","source":"bastion1","target":"jump1","result":"SUCCESS","endpoint":"10.20.4.11:5985","channel":"winrm","username":"corp\\jmpuser","domain":"corp","duration_s":2.5}
-{"timestamp":"2026-08-12T09:15:41.000+00:00","seq":11,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"permission","host_id":"win-app01","action":"PERMISSION_REQUEST","source":"local","target":"win-app01","result":"BLOCKED","operation_id":"install-package","gated":true,"confirmed":false,"granted":false,"detail":"install-package awaiting operator approval"}
-{"timestamp":"2026-08-12T09:16:05.300+00:00","seq":15,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"step.end","host_id":"win-app01","action":"SCRIPT_EXECUTE","source":"local","target":"win-app01","result":"FAILURE","operation_id":"install-package","step_id":"install","ok":false,"exit_code":1603,"duration_s":22.4,"expectation_reason":"expected exit code 0, got 1603","stdout_chars":184,"collected":2,"hint":"Generic MSI failure. ...","detail":"install-package/install"}
-{"timestamp":"2026-08-12T09:16:09.100+00:00","seq":17,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"collect","host_id":"win-app01","action":"LOG_COLLECT","source":"local","target":"win-app01","result":"SUCCESS","step_id":"install","sources":["C:\\Windows\\Temp\\MSI*.LOG","eventlog:Application"],"exit_code":1603,"detail":"2 source(s) after install"}
-{"timestamp":"2026-08-12T09:20:02.700+00:00","seq":24,"agentId":"AGT-20260812-001","sessionId":"SES-845921","event":"session.close","host_id":"win-app01","action":"SESSION_END","source":"local","target":"win-app01","result":"SUCCESS","detail":"closed","status":"closed","elapsed_s":282.6,"records":23,"steps_run":3,"steps_ok":2,"steps_failed":1,"errors":0,"blocked":0,"log_file":"...\\20260812T091520Z-845921.jsonl"}
+{"timestamp":"2026-08-12T09:15:20.100+00:00","seq":1,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"session.open","host_id":"win-app01","action":"SESSION_START","source":"local","target":"win-app01","result":"SUCCESS","detail":"local -> bastion1 (ssh) -> jump1 (winrm) -> win-app01 (nested winrm)","route":"local -> bastion1 (ssh) -> jump1 (winrm) -> win-app01 (nested winrm)","hops":[...],"allowed_operations":["install-package"],"client_host":"WS-AK01","client_os":"Windows-11","pid":18244}
+{"timestamp":"2026-08-12T09:15:21.400+00:00","seq":2,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"hop.auth","host_id":"win-app01","hop_id":"bastion1","method":"publickey","username":"operator"}
+{"timestamp":"2026-08-12T09:15:23.900+00:00","seq":3,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"hop.auth","host_id":"win-app01","hop_id":"bastion1","method":"password","username":"operator"}
+{"timestamp":"2026-08-12T09:15:24.000+00:00","seq":4,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"ssh.connect","host_id":"win-app01","action":"SSH_CONNECT","source":"local","target":"bastion1","result":"SUCCESS","hop_id":"bastion1","endpoint":"bastion1.example.net:2222","channel":"ssh","username":"operator","auth_methods":["publickey","password"],"host_key":"known","preestablished":false,"duration_s":3.9}
+{"timestamp":"2026-08-12T09:15:24.200+00:00","seq":5,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"tunnel.open","host_id":"win-app01","hop_id":"bastion1","target":"10.20.4.11:5985","local_port":53001,"purpose":"winrm:jump1"}
+{"timestamp":"2026-08-12T09:15:24.210+00:00","seq":6,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"winrm.ntlm_provider","host_id":"win-app01","hop_id":"jump1","provider":"sspi","configured":"auto"}
+{"timestamp":"2026-08-12T09:15:26.800+00:00","seq":7,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"winrm.connect","host_id":"win-app01","action":"WINRM_CONNECT","source":"bastion1","target":"jump1","result":"SUCCESS","endpoint":"10.20.4.11:5985","channel":"winrm","username":"corp\\jmpuser","domain":"corp","duration_s":2.5}
+{"timestamp":"2026-08-12T09:15:41.000+00:00","seq":11,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"permission","host_id":"win-app01","action":"PERMISSION_REQUEST","source":"local","target":"win-app01","result":"BLOCKED","operation_id":"install-package","gated":true,"confirmed":false,"granted":false,"detail":"install-package awaiting operator approval"}
+{"timestamp":"2026-08-12T09:16:05.300+00:00","seq":15,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"step.end","host_id":"win-app01","action":"SCRIPT_EXECUTE","source":"local","target":"win-app01","result":"FAILURE","operation_id":"install-package","step_id":"install","ok":false,"exit_code":1603,"duration_s":22.4,"expectation_reason":"expected exit code 0, got 1603","stdout_chars":184,"collected":2,"hint":"Generic MSI failure. ...","detail":"install-package/install"}
+{"timestamp":"2026-08-12T09:16:09.100+00:00","seq":17,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"collect","host_id":"win-app01","action":"LOG_COLLECT","source":"local","target":"win-app01","result":"SUCCESS","step_id":"install","sources":["C:\\Windows\\Temp\\MSI*.LOG","eventlog:Application"],"exit_code":1603,"detail":"2 source(s) after install"}
+{"timestamp":"2026-08-12T09:20:02.700+00:00","seq":24,"agentId":"AGT-20260812-3f9a1c","sessionId":"SES-3f9a1c","event":"session.close","host_id":"win-app01","action":"SESSION_END","source":"local","target":"win-app01","result":"SUCCESS","detail":"closed","status":"closed","elapsed_s":282.6,"records":23,"steps_run":3,"steps_ok":2,"steps_failed":1,"errors":0,"blocked":0,"log_file":"...\\20260812T091520Z-3f9a1c.jsonl"}
 ```
 
 ---
@@ -174,7 +174,7 @@ comm -23 <(jq -r 'select(.event=="session.open") |.sessionId' *.jsonl | sort -u)
          <(jq -r 'select(.event=="session.close")|.sessionId' *.jsonl | sort -u)
 
 # everything one agent run did, in order
-jq -c 'select(.agentId=="AGT-20260812-001")' *.jsonl
+jq -c 'select(.agentId=="AGT-20260812-3f9a1c")' *.jsonl
 ```
 
 ---
@@ -183,17 +183,19 @@ jq -c 'select(.agentId=="AGT-20260812-001")' *.jsonl
 
 | Id | Scope | Where it appears |
 |---|---|---|
-| `agentId` | One agent instance / run (per day) | Every record. Override with `AC_AGENT_ID` |
+| `agentId` | One agent instance / run | Every record. Override with `ac connect --agent-id` or `AC_AGENT_ID` |
 | `sessionId` | One authenticated path | Every record; `ac status`, `ac audit`, `ac timeline` |
 | `trace_id` | Sortable, filename-safe | The `.jsonl` / `.md` file name. Not inside the records |
 | `seq` | Ordering within one session | Every record |
 | `change_ref` | One change ticket | The brief and its reports — **not** in the JSONL |
 
-`trace_id` is `<UTC timestamp>-<session seq>`; the operator-facing `sessionId`
-(`SES-845921`) is not sortable and could in principle repeat after the counter
-wraps at 1 000 000, which is why files are named by the trace id.
+`trace_id` is `<UTC timestamp>-<random suffix>`; the same suffix forms the
+`sessionId` (`SES-3f9a1c`), which is not sortable — which is why files are
+named by the trace id. The suffix is random rather than counted, so concurrent
+sessions started by independent processes never share an id or a log file.
 
-To bind a run to a person and a ticket, set `AC_AGENT_ID` before connecting:
+To bind a run to a person and a ticket, pass `--agent-id` (or set
+`AC_AGENT_ID`) before connecting:
 
 ```powershell
 $env:AC_AGENT_ID = "claude/amit.kala/CHG0043211"

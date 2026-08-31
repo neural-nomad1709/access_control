@@ -145,7 +145,7 @@ action records in place:
 ```
 
 That one output covers gaps 6, 7 and 9 at once: distinct identity per run
-(`AGT-20260812-001` / `SES-000001`), canonical `source -> target` records
+(`AGT-20260812-3f9a1c` / `SES-3f9a1c`), canonical `source -> target` records
 including the refusal, and a readable execution trace with timings.
 
 ## Live verification of the Windows path (2026-08-13)

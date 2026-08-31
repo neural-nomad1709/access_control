@@ -32,6 +32,7 @@ Ids are stable: `F-nn` findings, `B-nn` fixed bugs, `C-nn` changes.
 | B-13 | WinRM failed with `SEC_E_LOGON_DENIED` on a direct route, looking exactly like a wrong password | Client Group Policy *Restrict NTLM: Outgoing = Deny* makes Windows SSPI refuse **locally**, before any packet is sent | `auth.ntlm_provider: auto` resolves per route: SSPI through a tunnel, pure-Python for a direct leg. Recorded in a `winrm.ntlm_provider` audit event | Unit-checked (provider resolution) |
 | B-14 | After a while every WinRM request returned an empty `Bad HTTP response … Code: 400` | The pure-Python NTLM provider desynced its message-seal counters, which live in the pypsrp client's auth context | `_looks_wedged` detection, `_reopen` rebuilds the whole client reusing the stored credential, one transparent retry of the same script | Unit-checked (wedge detection and rebuild) |
 | B-15 | Paramiko protocol chatter (`unhandled type 3`) printed into the middle of a password prompt and read like a failure | Nothing had configured a handler, so `logging.lastResort` printed to stderr | Library loggers routed to `<log dir>/transport.log` through a redacting filter, with `propagate = False` | — |
+| B-16 | Concurrent sessions could share a `session_id`, and two starting in the same second could share a `trace_id` — which names the log file, so **two sessions' audit trails interleaved in one `.jsonl`** | `context._next_sequence` guarded a file read-modify-write with a `threading.Lock`, which serialises threads within one process but not ten separate `ac connect` processes. A torn read also reset the counter to 0. The same race applied to the generated `AGT-<date>-<seq>`, so two independent agents could take one identity | Ids now carry a random 6-hex suffix (`SES-3f9a1c`, `trace_id` `20260812T091520Z-3f9a1c`) and need no coordination. `_next_sequence` and the `state/*.seq` files were removed rather than locked. `audit.default_agent_id()` gained the same suffix — ten agents on one host were otherwise all `claude-code@HOST` | `test_routegraph.py::TestAgentIdentity::test_same_second_runs_get_distinct_trace_ids` (50 creations inside one second) |
 
 ### Changes shipped
 
@@ -44,10 +45,11 @@ Ids are stable: `F-nn` findings, `B-nn` fixed bugs, `C-nn` changes.
 | C-05 | `ac reload` | Editing an operation otherwise meant reconnecting, which costs a password per hop — enough friction that people stop iterating |
 | C-06 | Direct WinRM (`via: {from: local}`) | A VPN-reachable host has no bastion to anchor a tunnel at. Still declared, never discovered, and recorded as `winrm.direct` because it bypasses every hop |
 | C-07 | `package_share` on a host is rejected at load time | A path is a fact about the job, not the machine. As a host field it silently rendered empty and failed on the server; as an operation parameter it is refused up front, by name |
-| C-08 | Per-run identity (`AGT-<date>-<seq>` / `SES-<seq>` / sortable `trace_id`) | A single static agent id makes concurrent runs indistinguishable, which is exactly when telling them apart matters |
+| C-08 | Per-run identity (`AGT-<date>-<suffix>` / `SES-<suffix>` / sortable `trace_id`) | A single static agent id makes concurrent runs indistinguishable, which is exactly when telling them apart matters. Superseded in part by C-12: the suffix was originally a persisted counter |
 | C-09 | Canonical action records and `ac timeline` | The trail can be filtered by `action` and correlated by `source`/`target` without parsing prose, and drops into a SIEM without a transform |
 | C-10 | Configurable logging location and retention, defaulting outside the repository | The repository sits in a OneDrive-synced folder; captured server output must not be uploaded |
 | C-11 | Documentation restructured into `docs/{guides,implementation,reports}` with six core documents | The audit of 2026-08-17. See [docs/gap-analysis.md](docs/gap-analysis.md) |
+| C-12 | Identity suffixes became random; `_next_sequence` and `state/*.seq` removed; `ac connect --agent-id` added | See B-16 — C-08's persisted counter could not keep its promise across processes. Explicit naming was env-var-only, which is the wrong default when ten agents each need their own identity |
 
 ---
 
@@ -88,7 +90,7 @@ driving a live session.
 | F-16 | `EV_HOP_CONNECTED`, `EV_TRANSFER`, `EV_RDP` — declared constants nothing emits |
 | F-17 | `safety.classify/check(extra_rules=…)` — an extension point with no caller |
 | F-18 | `Route.is_direct`, `Route.nested_chain`, `Route.psrp_entry`, `Inventory.node_context` — unused helpers |
-| F-19 | `context._next_sequence(width=…)` — accepted and immediately `del`eted |
+| F-19 | ~~`context._next_sequence(width=…)` — accepted and immediately `del`eted~~ **Resolved 2026-08-31**: the function was removed outright; ids now use a random suffix, eliminating the cross-process counter race as well |
 
 Each is harmless. Either wire it up or remove it; leaving it suggests a feature
 that is not there.
