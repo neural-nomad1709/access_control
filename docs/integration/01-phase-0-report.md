@@ -40,6 +40,18 @@ Date: 2026-08-31 · Branch: `wip/phase-0-hygiene` (access_control)
 - **ruff/mypy in CI** — the repo has neither configured; adding new linters requires
   Amit's sign-off per the brief (open items F-20/F-21/F-22).
 
+## Code review (2026-08-31)
+
+The code-review pass raised 4 findings; all addressed test-first (suite now **351 passed**):
+
+1. Postcheck was audited as a bare `PREFLIGHT` action — `do_preflight` now records a
+   `phase` field (`preflight`/`postcheck`) so the JSONL trail distinguishes them.
+2. `SO_REUSEADDR` could let a Windows process silently share/steal the tunnel port —
+   `LocalTunnel` now binds with `SO_EXCLUSIVEADDRUSE` on win32, proven by a busy-port test.
+3. The postcheck failure-print loop duplicated the preflight one — extracted to
+   `_print_failed_checks`.
+4. CI ran PR commits twice (push `**` + pull_request) — push trigger narrowed to `main`.
+
 ## Open risks
 
 - The CI workflow is untested until pushed to GitHub (no local Actions runner).
