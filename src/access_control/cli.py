@@ -782,7 +782,7 @@ def brief_run(
     ),
     json_out: bool = typer.Option(False, "--json", help="Emit JSON"),
 ) -> None:
-    """Execute a brief: preflight, then each operation in order, then report."""
+    """Execute a brief: preflight, each operation in order, postcheck, report."""
     inventory, catalog, _ = load_all()
     try:
         brief = load_brief(path)
@@ -869,11 +869,33 @@ def brief_run(
         if brief.rules.stop_on_first_failure and failed:
             break
 
+    # -- postcheck -----------------------------------------------------------
+    # Same shape and daemon handler as preflight, run against the state the
+    # operations were supposed to establish. Skipped when the brief already
+    # failed: those expectations were never established, so checking them
+    # would only bury the real failure.
+    postcheck_report: dict[str, Any] | None = None
+    if brief.postcheck and not failed:
+        postcheck_report = client.call("preflight", spec=dict(brief.postcheck))
+        if postcheck_report["ok"]:
+            console.print(
+                f"[green]postcheck passed[/green] ({len(postcheck_report['checks'])} checks)"
+            )
+        else:
+            failed = True
+            for check in postcheck_report["checks"]:
+                if not check["passed"]:
+                    _raw(f"  {check['name']}: {check['detail']}", "red")
+                    if check.get("remedy"):
+                        _raw(f"    -> {check['remedy']}", "yellow")
+            _raw(f"postcheck failed for brief '{brief.id}': the change ran, but did not verify.", "red")
+
     payload = {
         "brief_id": brief.id,
         "host": brief.host,
         "ok": not failed,
         "operations": results,
+        "postcheck": postcheck_report,
         "success_criteria": list(brief.success_criteria),
     }
     if json_out:
