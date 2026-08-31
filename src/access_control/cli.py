@@ -1364,7 +1364,7 @@ def tunnel(
     if client is not None:
         info = client.call(
             "open_tunnel", dest_host=leg.endpoint.hostname, dest_port=dest_port,
-            purpose=f"manual:{node}",
+            purpose=f"manual:{node}", local_port=port,
         )
         _hold_tunnel(f"127.0.0.1:{info['local_port']}", node, leg.endpoint.hostname, dest_port)
         client.call("close_tunnel", tunnel_id=info["tunnel_id"])
@@ -1372,12 +1372,9 @@ def tunnel(
 
     console.print(f"Opening a session to carry the tunnel ({route.describe()}) ...")
     with EphemeralSession(node, inventory=inventory) as session:
-        forward = session.open_tunnel(leg.endpoint.hostname, dest_port, purpose=f"manual:{node}")
-        if port and forward.local_port != port:
-            console.print(
-                f"[yellow]note:[/yellow] bound {forward.local_port}, not {port} "
-                f"(the requested port was unavailable)"
-            )
+        forward = session.open_tunnel(
+            leg.endpoint.hostname, dest_port, purpose=f"manual:{node}", local_port=port
+        )
         _hold_tunnel(forward.endpoint, node, leg.endpoint.hostname, dest_port)
     del target
 
