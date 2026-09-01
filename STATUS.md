@@ -1,6 +1,6 @@
 # STATUS — access_control
 
-_Last updated: **2026-08-31**. Purpose: hand a fresh session the current state
+_Last updated: **2026-09-01**. Purpose: hand a fresh session the current state
 without re-deriving it._
 
 | | |
@@ -31,7 +31,16 @@ in the workspace; per-phase reports in [docs/integration/](docs/integration/).
 | 1 — evidence (Gatekeeper seam, receipt sink) | **Done, review-clean** | `wip/phase-1-evidence` | [03-phase-1-report.md](docs/integration/03-phase-1-report.md); tests 351 → 372; fake-SSH e2e ledger verifies, tamper detected; 8 review findings fixed |
 | 2 — enforcement (three engine.py call sites) | **Done, review-clean** | `wip/phase-2-enforcement` | [04-phase-2-report.md](docs/integration/04-phase-2-report.md); tests 372 → 419; acceptance a–d proven with the real gatekeeper; 8 review findings fixed |
 | 3 — mediated agent path (MCP) | **Done, review-clean** | `wip/phase-3-mcp` | [05-phase-3-report.md](docs/integration/05-phase-3-report.md); tests 419 → 447; agent runs read-only op via proxy, every hop receipted, drift refused; 8 review findings fixed |
-| 4 — governance | **Done, review pending** | `wip/phase-4-governance` (both repos) | [06-phase-4-report.md](docs/integration/06-phase-4-report.md); ac 447 → 462, AL 687 → 699; 5 review findings fixed; F-04, real budget enforcement, attestation test, SIEM doc |
+| 4 — governance | **Done, review-clean** | `wip/phase-4-governance` (both repos) | [06-phase-4-report.md](docs/integration/06-phase-4-report.md); ac 447 → 462, AL 687 → 699; 5 review findings fixed; F-04, real budget enforcement, attestation test, SIEM doc |
+
+**All phases done and review-clean.** Closing checks (brief rules 10–11) complete:
+two full test loops passed identically in both suites (ac 462, AL 699/12 skipped;
+no flakiness or order-dependence); docs refreshed (both READMEs, integration docs).
+Open loose ends, non-blocking: `.claude/settings.json` dropped 5 pre-integration
+OneDrive allow entries in Phase 3 (restore on request); AL's approvals endpoint
+still receipts resolutions as `mcp_tool_call` (ac side uses `permission_request`).
+Nothing is committed to `main` in either repo — every phase is on its `wip/…`
+branch awaiting your merge decision.
 
 ### Phase 4 delivered (Amit's calls: budgets enforced, SIEM doc-only, attestation test)
 
