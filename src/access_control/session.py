@@ -93,6 +93,11 @@ class Session:
         self.winrm: WinRMChannel | None = None
         self.channel: Any = None
         self.connected_at: float | None = None
+        #: When the session FIRST came up. Unlike ``connected_at`` (which a
+        #: target retry or a fall-back to a hop resets), this is set once and
+        #: never moved, so the absolute lifetime ceiling (F-04) cannot be
+        #: refreshed by reconnecting a flaky leg.
+        self.established_at: float | None = None
         self.last_used: float = time.time()
         self.closed = False
         self._close_reason: str | None = None
@@ -146,6 +151,7 @@ class Session:
             raise
 
         self.connected_at = time.time()
+        self.established_at = self.established_at or self.connected_at
         self.touch()
         return self
 
@@ -190,6 +196,7 @@ class Session:
         self.active_node = hop_node
         self.channel = channel
         self.connected_at = time.time()
+        self.established_at = self.established_at or self.connected_at
         self.touch()
         assert self.audit is not None
         self.audit.error(f"target leg failed: {exc}", host_id=self.host_id)
@@ -456,8 +463,11 @@ class Session:
 
     @property
     def lifetime_s(self) -> float:
-        """Seconds since connect (0 if never connected)."""
-        return time.time() - self.connected_at if self.connected_at else 0.0
+        """Seconds since the session first came up (0 if never connected).
+
+        Anchored on ``established_at``, not ``connected_at``, so a retry or a
+        fall-back to a hop does not refresh the absolute ceiling."""
+        return time.time() - self.established_at if self.established_at else 0.0
 
     @property
     def lifetime_expired(self) -> bool:
@@ -487,10 +497,12 @@ class Session:
         if self.channel is None:
             raise SessionError(f"session {self.session_id} is not connected")
         if self.lifetime_expired:
+            cap = (f"{self.max_lifetime_s // 60} minutes" if self.max_lifetime_s >= 60
+                   else f"{self.max_lifetime_s} seconds")
             raise SessionError(
                 f"session {self.session_id} has reached its maximum lifetime of "
-                f"{int(self.max_lifetime_s / 60)} minutes and has expired. Credentials "
-                f"were not stored -- reconnect with:\n    uv run ac connect {self.host_id}"
+                f"{cap} and has expired. Credentials were not stored -- reconnect "
+                f"with:\n    uv run ac connect {self.host_id}"
             )
         if self.expired:
             raise SessionError(

@@ -27,11 +27,14 @@ def session(config_files):
     )
 
 
-def _mark_connected(session: Session, *, connected_at: float, last_used: float) -> None:
+def _mark_connected(session: Session, *, connected_at: float, last_used: float,
+                    established_at: float | None = None) -> None:
     """Pretend the session connected and last ran at these times, without a
-    socket — the lifetime clock reads connected_at, the idle clock last_used."""
+    socket — the lifetime clock reads established_at (set once at first
+    connect), the idle clock last_used. connected_at moves on retry/degrade."""
     session.channel = object()
     session.connected_at = connected_at
+    session.established_at = established_at if established_at is not None else connected_at
     session.last_used = last_used
 
 
@@ -57,6 +60,17 @@ class TestLifetimeExpiry:
                         last_used=time.time())
         assert not session.expired
 
+    def test_a_target_retry_does_not_refresh_the_lifetime_clock(self, session) -> None:
+        """The ceiling is measured from first connect and never refreshed. A
+        flaky far end that gets :retry'd repeatedly must not reset it, or the
+        continuously-driven session F-04 bounds stays open forever."""
+        session.max_lifetime_s = 3600
+        established = time.time() - 7200  # first came up 2h ago
+        _mark_connected(session, connected_at=time.time(),  # a retry just now
+                        last_used=time.time(), established_at=established)
+        assert session.lifetime_expired
+        assert session.expired
+
     def test_idle_expiry_still_fires_below_the_ceiling(self, session) -> None:
         session.idle_timeout_s = 60
         session.max_lifetime_s = 86_400
@@ -72,6 +86,16 @@ class TestLifetimeReporting:
                         last_used=time.time())
         with pytest.raises(SessionError, match="maximum lifetime"):
             session.require_active()
+
+    def test_a_sub_hour_cap_is_reported_in_a_sensible_unit(self, session) -> None:
+        """A 5-minute ceiling must not render as 'maximum lifetime of 0 minutes'."""
+        session.max_lifetime_s = 300
+        _mark_connected(session, connected_at=time.time() - 600,
+                        last_used=time.time())
+        with pytest.raises(SessionError) as exc:
+            session.require_active()
+        assert "0 minutes" not in str(exc.value)
+        assert "300 seconds" in str(exc.value) or "5 minutes" in str(exc.value)
 
     def test_status_reports_the_lifetime_and_remaining(self, session) -> None:
         session.max_lifetime_s = 3600
