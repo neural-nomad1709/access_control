@@ -62,6 +62,30 @@ Date: 2026-09-01 · Branch: `wip/phase-1-evidence` (access_control) · 2 commits
 - **al-verify CLI not shelled out in tests** — the tests call
   `al_verify.verify_chain`, the same function the CLI wraps.
 
+## Code review (2026-09-01)
+
+8 findings; all addressed test-first (suite now **372 passed**):
+
+1. **Signing key at the CWD (worst)** — AL's default key path is CWD-relative and a
+   test run had dropped a raw Ed25519 private key at the repo root, matching no
+   ignore pattern. The runtime now gets a `keys.signing_key_path` override under
+   `data_dir`; `/keys/` gitignored as a belt; a regression test pins placement.
+2. **Half-plumbed seam** — the Session now owns the gatekeeper (build_session sets
+   it, Engine inherits it), so the daemon path cannot end up receipted-but-
+   unenforced in Phase 2.
+3. **Sink ordering** — the audit lock is re-entrant and held across emit + sink, so
+   the mirrored ledger chains in JSONL seq order under concurrent daemon threads.
+4. **Sink vs `enabled`** — deliberate and now documented: local logging off must
+   not switch off governance evidence.
+5. **Mapping drift** — every `audit.ACTIONS` member (plus PREFLIGHT/COMMAND, F-12)
+   has an explicit mapping entry, pinned by a cross-module test.
+6. **SPIFFE grammar** — agent ids lowercased; receipt actors proven parseable by
+   `al_core.identity.spiffe_id`.
+7. `sink` typed `Callable[..., None] | None`; gatekeeper paths typed `str | Path`.
+8. Stdlib imports moved to module top; only the `al_core.embed` import is deferred.
+
+One candidate was refuted by the reviewer (teardown connection leak).
+
 ## Open risks
 
 - CI (`uv sync --frozen`) on a checkout without the sibling AgentLighthouse clone:

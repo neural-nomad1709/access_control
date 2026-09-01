@@ -6,7 +6,7 @@ without re-deriving it._
 | | |
 |---|---|
 | Version | `0.1.0` |
-| Tests | **367 passing** (`uv run pytest`, fully offline, ~25 s; 7 need the `[lighthouse]` extra and skip on a plain install) |
+| Tests | **372 passing** (`uv run pytest`, fully offline, ~25 s; 12 need the `[lighthouse]` extra and skip on a plain install) |
 | Source | ~11 000 lines across 27 modules in `src/access_control` |
 | Documentation | Complete as of the 2026-08-17 audit — see [docs/README.md](docs/README.md) |
 | Version control | On `main`, pushed to GitHub. `src/access_control/credentials.py` is tracked — the old `*credential*` ignore pattern was narrowed to credential material only (`credentials.json`, `*credentials.y*ml`, `*credentials.txt`); see [2026-08-20 follow-ups](#follow-ups-owed-from-this-session) |
@@ -28,7 +28,7 @@ in the workspace; per-phase reports in [docs/integration/](docs/integration/).
 | R — context load | **Done** | `wip/phase-r-context` | [00-context.md](docs/integration/00-context.md); both suites green |
 | 0 — hygiene (F-07, F-08, CI) | **Done, review-clean** | `wip/phase-0-hygiene` | [01-phase-0-report.md](docs/integration/01-phase-0-report.md); tests 341 → 351 |
 | AL-0 — AL pre-work (approvals surface, persistence, detect-secrets, embed facade, receipt v1.1) | **Done, review-clean** | `wip/phase-al-0` (AgentLighthouse) | [02-phase-al-0-report.md](docs/integration/02-phase-al-0-report.md); AL tests 632 → 683 |
-| 1 — evidence (Gatekeeper seam, receipt sink) | **Done, review pending** | `wip/phase-1-evidence` | [03-phase-1-report.md](docs/integration/03-phase-1-report.md); tests 351 → 367; fake-SSH e2e ledger verifies, tamper detected |
+| 1 — evidence (Gatekeeper seam, receipt sink) | **Done, review-clean** | `wip/phase-1-evidence` | [03-phase-1-report.md](docs/integration/03-phase-1-report.md); tests 351 → 372; fake-SSH e2e ledger verifies, tamper detected; 8 review findings fixed |
 | 2 — enforcement (three engine.py call sites) | Not started | — | D3/D4 open |
 | 3 — mediated agent path (MCP) | Not started | — | |
 | 4 — governance | Not started | — | scope TBD with Amit |
