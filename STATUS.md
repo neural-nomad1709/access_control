@@ -6,10 +6,36 @@ without re-deriving it._
 | | |
 |---|---|
 | Version | `0.1.0` |
-| Tests | **348 passing** (`uv run pytest`, fully offline, ~25 s) |
+| Tests | **351 passing** (`uv run pytest`, fully offline, ~25 s) |
 | Source | ~11 000 lines across 27 modules in `src/access_control` |
 | Documentation | Complete as of the 2026-08-17 audit — see [docs/README.md](docs/README.md) |
 | Version control | On `main`, pushed to GitHub. `src/access_control/credentials.py` is tracked — the old `*credential*` ignore pattern was narrowed to credential material only (`credentials.json`, `*credentials.y*ml`, `*credentials.txt`); see [2026-08-20 follow-ups](#follow-ups-owed-from-this-session) |
+
+---
+
+## AgentLighthouse integration (2026-08-31, in progress)
+
+access_control is being wired to AgentLighthouse (sibling clone in the
+`ac-al_integration/` workspace) as its governance plane: AL supplies the
+out-of-band approval gate (R-01), per-identity default-deny tool policy (R-02),
+output scanning + taint (R-06/R-07), and a signed tamper-evident receipt ledger
+(R-09). AL stays strictly optional — the default `NullGatekeeper` keeps a plain
+install byte-identical to today. Plan: `ref/AC_AL_Integration_Analysis_v2.1.md`
+in the workspace; per-phase reports in [docs/integration/](docs/integration/).
+
+| Phase | State | Branch | Evidence |
+|---|---|---|---|
+| R — context load | **Done** | `wip/phase-r-context` | [00-context.md](docs/integration/00-context.md); both suites green |
+| 0 — hygiene (F-07, F-08, CI) | **Done, review-clean** | `wip/phase-0-hygiene` | [01-phase-0-report.md](docs/integration/01-phase-0-report.md); tests 341 → 351 |
+| AL-0 — AL pre-work (approvals surface, persistence, detect-secrets, embed facade, receipt v1.1) | **Done, review-clean** | `wip/phase-al-0` (AgentLighthouse) | [02-phase-al-0-report.md](docs/integration/02-phase-al-0-report.md); AL tests 632 → 683 |
+| 1 — evidence (Gatekeeper seam, receipt sink) | **In progress** | `wip/phase-1-evidence` | this section |
+| 2 — enforcement (three engine.py call sites) | Not started | — | D3/D4 open |
+| 3 — mediated agent path (MCP) | Not started | — | |
+| 4 — governance | Not started | — | scope TBD with Amit |
+
+Decisions so far: **D2** = extend receipt vocabulary additively (v1.1 shipped in
+AL-0.5). Observability-UI upgrade deferred by Amit. D1 (embed as library) per
+plan; D3/D4 to be asked before Phase 2 builds them.
 
 ---
 
