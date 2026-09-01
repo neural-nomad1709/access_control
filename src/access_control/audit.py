@@ -112,6 +112,10 @@ class AuditLog:
     #: (``SES-3f9a1c``) is not sortable, so files are named by this instead.
     trace_id: str | None = None
     enabled: bool = True
+    #: Optional receipt sink: called with every canonical action record
+    #: (post-redaction) so an external ledger can mirror the trail. A sink
+    #: failure propagates — evidence is synchronous or it is not evidence.
+    sink: Any = None
 
     def __post_init__(self) -> None:
         self.directory = ensure_dir(Path(self.directory) if self.directory else log_dir())
@@ -173,7 +177,7 @@ class AuditLog:
         (``step.end``) can carry a canonical action without emitting the record
         twice.
         """
-        return self.emit(
+        record = self.emit(
             event or action.lower().replace("_", "."),
             action=action,
             source=source or "local",
@@ -181,6 +185,9 @@ class AuditLog:
             result=result,
             **fields,
         )
+        if self.sink is not None:
+            self.sink(**record)
+        return record
 
     def _append(self, record: dict[str, Any]) -> None:
         if not self.enabled:

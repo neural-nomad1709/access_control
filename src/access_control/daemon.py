@@ -39,6 +39,7 @@ from .context import AgentIdentity
 from .credentials import CredentialStore, select_prompter
 from .engine import Engine, tail_command
 from .errors import AccessControlError, SessionError
+from .gatekeeper import Gatekeeper
 from .paths import ensure_dir, session_dir
 from .preflight import run_preflight
 from .route import plan_route
@@ -601,8 +602,14 @@ def build_session(
     agent_id: str | None = None,
     prompter_name: str | None = None,
     fallback_to_hop: bool = True,
+    gatekeeper: "Gatekeeper | None" = None,
 ) -> Session:
-    """Construct (but do not connect) a session for ``host_id``."""
+    """Construct (but do not connect) a session for ``host_id``.
+
+    ``gatekeeper`` plugs an external governance plane in: its ``receipt`` sink
+    mirrors every canonical audit action. None (the default) keeps today's
+    behaviour exactly.
+    """
     if inventory is None or catalog is None:
         loaded_inventory, loaded_catalog, _warnings = load_all()
         inventory = inventory or loaded_inventory
@@ -628,6 +635,7 @@ def build_session(
         directory=directory,
         trace_id=identity.trace_id,
         enabled=log_config.enabled,
+        sink=gatekeeper.receipt if gatekeeper is not None else None,
     )
 
     session = Session(

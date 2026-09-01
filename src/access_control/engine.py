@@ -41,6 +41,7 @@ from .config import (
     unresolved_variables,
 )
 from .errors import CommandBlocked, ConfigError, PermissionRequired
+from .gatekeeper import Gatekeeper, NullGatekeeper
 from .redact import redact
 from .session import Session
 from .template import render
@@ -252,9 +253,10 @@ class OperationOutcome:
 class Engine:
     """Runs operations and ad-hoc commands against one session."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, gatekeeper: "Gatekeeper | None" = None) -> None:
         self.session = session
         self.audit = session.audit
+        self.gatekeeper: Gatekeeper = gatekeeper or NullGatekeeper()
         self._report_seq = 0
 
     # -- planning ---------------------------------------------------------
