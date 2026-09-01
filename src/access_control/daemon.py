@@ -647,6 +647,15 @@ def build_session(
         creds=CredentialStore(prompter=select_prompter(prompter_name)),
         audit=audit,
         gatekeeper=gatekeeper,
+        # An explicit agent id (flag or env) or a Claude Code environment
+        # means an agent drives this session: its confirm gate resolves out
+        # of band, never via a flag the agent itself passes.
+        agent_attached=bool(
+            agent_id
+            or os.environ.get("AC_AGENT_ID")
+            or os.environ.get("CLAUDECODE")
+            or os.environ.get("CLAUDE_CODE")
+        ),
         allowed_operations=allowed_operations,
         fallback_to_hop=fallback_to_hop,
     )

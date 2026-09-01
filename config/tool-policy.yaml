@@ -1,0 +1,54 @@
+# Identity-bound tool policy for the governance plane (AgentLighthouse L4).
+#
+# Loaded by the LighthouseGatekeeper; with NullGatekeeper (a plain install)
+# this file is inert. DEFAULT-DENY: a tool runs only if the calling identity
+# has an explicit allow rule AND the arguments satisfy its constraints; an
+# explicit deny always wins; unlisted identities can run nothing (D4: this
+# applies to every session, human-interactive included).
+#
+# Tool names: "<operation-id>.<step-id>" for catalogued steps, "ac_exec" for
+# ad-hoc commands. Identities: spiffe://access-control/agent/<agent-id>,
+# lowercased ([a-z0-9._-]; other characters become '-'). An operator's default
+# id is user-hostname-suffix; pin identities with `ac connect --agent-id` or
+# AC_AGENT_ID so policy names stay stable.
+#
+# Argument constraints: allow_hosts, allow_prefixes / deny_prefixes,
+# allow_values / deny_values, max_len (see AgentLighthouse
+# core/al_core/capability/policy.py).
+#
+# This starter grants the read-only half of the shipped catalogue to one
+# example agent identity. Copy the block per real identity; leave `default`
+# empty — it is the fail-closed floor. Gated operations (install-package,
+# patch-windows, run-command) still face the HITL approval gate even when
+# allowed here; allow ac_exec only for identities that genuinely diagnose.
+
+agents:
+  # EXAMPLE — replace with your agent's pinned identity.
+  "spiffe://access-control/agent/claude-code-example":
+    allow:
+      # Read-only catalogue operations, step by step.
+      - tool: windows-health.snapshot
+      - tool: linux-health.snapshot
+      - tool: linux-service-status.status
+      - tool: collect-diagnostics.eventlog
+      - tool: collect-diagnostics.logfile
+      # Gated write operations: allowed to be *requested* — the HITL gate
+      # still holds them for a human. Remove these lines to forbid even the
+      # request.
+      - tool: install-package.preflight
+      - tool: install-package.install
+      - tool: install-package.verify
+      # Ad-hoc diagnosis, size-capped. The two-tier deny-list still applies
+      # after policy, as the last line.
+      - tool: ac_exec
+        args:
+          command:
+            max_len: 500
+    deny:
+      # The escape hatch the catalogue itself gates twice over.
+      - { tool: run-command.exec }
+
+  # Unlisted identities: deny everything (fail-closed floor). Do not add
+  # rules here — add a named identity block instead.
+  default:
+    allow: []

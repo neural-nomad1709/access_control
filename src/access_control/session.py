@@ -58,6 +58,15 @@ class Session:
     #: (daemon, CLI) inherits the same one — the receipt sink and enforcement
     #: cannot diverge by construction. None means ungoverned (NullGatekeeper).
     gatekeeper: "Gatekeeper | None" = None
+    #: True when an agent drives this session (explicit --agent-id /
+    #: AC_AGENT_ID, or a Claude Code environment). An agent-attached session
+    #: cannot satisfy the confirm gate with a flag: approvals resolve out of
+    #: band through the gatekeeper.
+    agent_attached: bool = False
+    #: Set when the gatekeeper's scanner found hostile content in collected
+    #: output. Monotonic for the life of the session; a tainted session gates
+    #: every operation.
+    tainted: bool = False
     #: Operations the operator authorised for this session.  Empty means "any
     #: operation the catalog permits for this host".
     allowed_operations: tuple[str, ...] = ()

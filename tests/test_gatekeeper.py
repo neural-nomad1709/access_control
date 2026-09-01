@@ -158,6 +158,45 @@ class TestBuildSessionWiring:
         assert engine.gatekeeper is gk
 
 
+class TestAgentAttachment:
+    def _build(self, config_files: Path, monkeypatch: pytest.MonkeyPatch, **kwargs):
+        from access_control.config import load_inventory, load_operations
+        from access_control.daemon import build_session
+
+        monkeypatch.setenv("AC_DATA_DIR", str(config_files.parent / "data"))
+        inventory = load_inventory(config_files / "inventory.yaml")
+        catalog = load_operations(config_files / "operations.yaml")
+        return build_session("lin01", inventory=inventory, catalog=catalog, **kwargs)
+
+    @staticmethod
+    def _human_env(monkeypatch: pytest.MonkeyPatch) -> None:
+        for var in ("AC_AGENT_ID", "CLAUDECODE", "CLAUDE_CODE"):
+            monkeypatch.delenv(var, raising=False)
+
+    def test_a_plain_session_is_not_agent_attached(
+        self, config_files: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._human_env(monkeypatch)
+        session = self._build(config_files, monkeypatch)
+        assert session.agent_attached is False
+        assert session.tainted is False
+
+    def test_an_explicit_agent_id_marks_the_session_agent_attached(
+        self, config_files: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._human_env(monkeypatch)
+        session = self._build(config_files, monkeypatch, agent_id="claude-agent-1")
+        assert session.agent_attached is True
+
+    def test_a_claude_code_environment_marks_the_session_agent_attached(
+        self, config_files: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._human_env(monkeypatch)
+        monkeypatch.setenv("CLAUDECODE", "1")
+        session = self._build(config_files, monkeypatch)
+        assert session.agent_attached is True
+
+
 class TestSinkOrdering:
     def test_the_sink_fires_inside_the_audit_lock(self, tmp_path: Path) -> None:
         """Concurrent daemon threads share one AuditLog; the sink must run

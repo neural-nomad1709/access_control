@@ -22,6 +22,7 @@ holding a session -- and, when the target leg failed, for diagnosing the hop.
 
 from __future__ import annotations
 
+import os
 import shlex
 from typing import Any
 
@@ -43,6 +44,8 @@ Type a command and it runs on the machine named in the prompt.
   :route           the full hop chain, verbatim from inventory.yaml
   :retry           re-attempt the target leg (only when held at a hop)
   :timeout <secs>  per-command timeout (default 300)
+  :approve         list approvals an agent is waiting on
+  :approve <id>    grant one (:deny <id> refuses it) -- receipted, named
   :exit / :quit    close the session and wipe credentials
 
 Ctrl-C abandons the line you are typing. Ctrl-D closes the session.
@@ -130,6 +133,10 @@ class OperatorShell:
             self._retry()
         elif name == "timeout":
             self._set_timeout(args)
+        elif name == "approve":
+            self._resolve_approval(args, "allow")
+        elif name == "deny":
+            self._resolve_approval(args, "deny")
         else:
             self.err.print(f"[yellow]unknown prompt command ':{name}' -- try :help[/yellow]")
         return False
@@ -195,6 +202,40 @@ class OperatorShell:
             return
         self.timeout_s = value
         self.console.print(f"  timeout   {self.timeout_s}s")
+
+    # -- approvals (D3: the human at this prompt is usually the approver) ---
+
+    def _resolve_approval(self, args: list[str], decision: str) -> None:
+        gatekeeper = getattr(self.session, "gatekeeper", None)
+        if gatekeeper is None or not hasattr(gatekeeper, "pending_approvals"):
+            self.err.print(
+                "[yellow]no governance plane is attached to this session; "
+                "there is nothing to approve here[/yellow]"
+            )
+            return
+        if not args:
+            pending = gatekeeper.pending_approvals()
+            if not pending:
+                self.console.print("[dim]no approvals waiting[/dim]")
+                return
+            for row in pending:
+                remaining = row.get("remaining_s")
+                lapse = f", lapses in {int(remaining)}s" if remaining is not None else ""
+                self.console.print(
+                    f"  {row['request_id']}  {row['tool']}  ({row['actor']}{lapse})\n"
+                    f"    :approve {row['request_id']}   or   :deny {row['request_id']}"
+                )
+            return
+        request_id = args[0]
+        resolver = f"user:{os.environ.get('USERNAME') or os.environ.get('USER') or 'operator'}"
+        if gatekeeper.resolve_approval(request_id, decision, by=resolver):
+            verb = "approved" if decision == "allow" else "denied"
+            self.console.print(f"[green]{verb}[/green] {request_id} as {resolver}")
+        else:
+            self.err.print(
+                f"[red]could not resolve {request_id}[/red] -- unknown, already "
+                f"resolved, or lapsed (a lapsed request is a denial and stays one)"
+            )
 
     # -- running a command ------------------------------------------------
 
