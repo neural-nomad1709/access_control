@@ -6,7 +6,7 @@ without re-deriving it._
 | | |
 |---|---|
 | Version | `0.1.0` |
-| Tests | **456 passing** (`uv run pytest`, fully offline, ~25 s; 27 need the `[lighthouse]` extra and skip on a plain install) |
+| Tests | **460 passing** (`uv run pytest`, fully offline, ~25 s; 27 need the `[lighthouse]` extra and skip on a plain install) |
 | Source | ~11 000 lines across 27 modules in `src/access_control` |
 | Documentation | Complete as of the 2026-08-17 audit — see [docs/README.md](docs/README.md) |
 | Version control | On `main`, pushed to GitHub. `src/access_control/credentials.py` is tracked — the old `*credential*` ignore pattern was narrowed to credential material only (`credentials.json`, `*credentials.y*ml`, `*credentials.txt`); see [2026-08-20 follow-ups](#follow-ups-owed-from-this-session) |
@@ -31,31 +31,23 @@ in the workspace; per-phase reports in [docs/integration/](docs/integration/).
 | 1 — evidence (Gatekeeper seam, receipt sink) | **Done, review-clean** | `wip/phase-1-evidence` | [03-phase-1-report.md](docs/integration/03-phase-1-report.md); tests 351 → 372; fake-SSH e2e ledger verifies, tamper detected; 8 review findings fixed |
 | 2 — enforcement (three engine.py call sites) | **Done, review-clean** | `wip/phase-2-enforcement` | [04-phase-2-report.md](docs/integration/04-phase-2-report.md); tests 372 → 419; acceptance a–d proven with the real gatekeeper; 8 review findings fixed |
 | 3 — mediated agent path (MCP) | **Done, review-clean** | `wip/phase-3-mcp` | [05-phase-3-report.md](docs/integration/05-phase-3-report.md); tests 419 → 447; agent runs read-only op via proxy, every hop receipted, drift refused; 8 review findings fixed |
-| 4 — governance | **In progress** | `wip/phase-4-governance` | F-04 done (`ac connect --max-lifetime`, tests 447 → 456); AL-side scope proposed below, awaiting Amit |
+| 4 — governance | **Done, review pending** | `wip/phase-4-governance` (both repos) | [06-phase-4-report.md](docs/integration/06-phase-4-report.md); ac 447 → 460, AL 687 → 696; F-04, real budget enforcement, attestation test, SIEM doc |
 
-### Phase 4 scope (F-04 done; the rest awaits Amit's go-ahead per the brief)
+### Phase 4 delivered (Amit's calls: budgets enforced, SIEM doc-only, attestation test)
 
-- **F-04 absolute session lifetime** — **done** in access_control:
-  `ac connect --max-lifetime <secs>`, watchdog closes an over-age session
-  (`session.lifetime_timeout`), status reports the remaining ceiling.
-- **Per-agent budgets / tenancy** — AL already ships `ToolPolicy` `budgets`
-  (`max_tool_calls_per_min`) and org tenancy keyed on the SPIFFE actor. Proposed:
-  document + set budgets in `config/mcp-tool-policy.yaml` and the embedded
-  policy; no new code. **Decision needed:** concrete budget numbers, or leave as
-  a documented knob?
-- **SIEM export of the combined stream** — AL ships ECS/MITRE receipt export;
-  ac's JSONL is already SIEM-shaped. Proposed: a short doc showing both streams
-  into one SIEM, keyed on the shared SPIFFE actor. **Decision needed:** is a doc
-  enough, or do you want a combining exporter built?
-- **Posture attestation covering ac operations** — AL ships signed posture
-  attestation. Proposed: document that ac's receipts (via the LighthouseGatekeeper
-  ledger) already feed it; verify the ac action vocabulary is covered. **Decision
-  needed:** doc-only, or a test proving an ac-operation attestation verifies?
-
-Recommendation: keep Phase 4 doc-and-config heavy (the brief calls it "mostly
-agentlighthouse config"), no speculative code. Confirm the three decisions above
-and I'll land them; otherwise F-04 is the substantive code and the rest is
-scoped as documentation.
+- **F-04 absolute session lifetime** — `ac connect --max-lifetime <secs>`;
+  watchdog closes an over-age session (`session.lifetime_timeout`), status shows
+  the remaining ceiling.
+- **Per-actor budgets, actually enforced** — AL's `max_tool_calls_per_min` was
+  declared-not-enforced; now a sliding-60s-window `BudgetTracker` at the
+  ActionGate denies the N+1th call with a receipted `BUDGET_EXCEEDED`. Shipped
+  policies set a generous `120/min` tripwire.
+- **Posture attestation covering ac operations** — a test builds the governance
+  attestation from an ac-driven ledger and proves ac's actions are counted and
+  the artefact verifies with `al-verify` (al-governance is a dev-only dep).
+- **SIEM combined stream** — `docs/integration/siem-combined-stream.md`: ac's
+  JSONL + AL's ECS/MITRE export joined on the per-agent SPIFFE actor. Doc, not a
+  combiner.
 
 Decisions so far: **D2** = extend receipt vocabulary additively (v1.1 shipped in
 AL-0.5). **D3** = approvals resolvable from both the AL control plane and the
