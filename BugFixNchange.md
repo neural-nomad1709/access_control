@@ -65,7 +65,7 @@ driving a live session.
 | F-01 | **`--confirm` does not prove a human approved** | The flag is passed by the caller, so an agent on a live session can self-approve any gated operation | **High** | An interactive approval gate the session itself satisfies (a prompt in the `ac connect` window), not a flag on the client |
 | F-02 | **`ac exec` is not scoped by `--ops`** | The session allow-list covers catalogue operations only. A "restricted" session still permits arbitrary ad-hoc commands, gated only by the deny-list | **High** | Extend the allow-list to `run_command`, or add a session mode that disables ad-hoc execution |
 | F-03 | **RDP launches are not audited** | `RDP_LAUNCH` is a declared action that nothing emits. The tunnel is recorded; the interactive session is not | Medium | Emit `RDP_LAUNCH` from `cli._run_rdp` with node, endpoint, username and whether a credential was staged |
-| F-04 | **No absolute session lifetime** | Only an idle timeout, which activity refreshes indefinitely | Medium | A `--max-lifetime` alongside `--idle-timeout` |
+| F-04 | ~~**No absolute session lifetime**~~ **Resolved 2026-09-01** | `ac connect --max-lifetime <secs>` caps a session from connect, never refreshed by activity (0 = no ceiling, the default); the watchdog closes it and emits `session.lifetime_timeout`. Regression tests in `test_session_lifetime.py` | — | — |
 | F-05 | **`logging.level` is validated then ignored** | Parsed, rejected if invalid, reported in `to_dict()`, and applied to nothing | Low (misleading) | Apply it, or remove the field |
 | F-06 | **`transport.log` and `errors.log` grow unbounded** | Retention prunes `*.jsonl` and `*.md` only | Low | Size-based rotation, or include them in pruning |
 

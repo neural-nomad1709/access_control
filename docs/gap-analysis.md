@@ -102,7 +102,7 @@ Tracked for triage in [../BugFixNchange.md](../BugFixNchange.md).
 | F-01 | `--confirm` does not prove a human approved | The flag is passed by the caller. An agent driving a live session can self-approve any gated operation | **High** for agent deployments |
 | F-02 | `ac exec` / `run_command` is not scoped by `--ops` | The session allow-list covers catalogue operations only. A "restricted" session still permits arbitrary ad-hoc commands, gated only by the deny-list | **High** |
 | F-03 | RDP launches are not audited | `RDP_LAUNCH` is a declared action but nothing emits it. `ac rdp` opens a tunnel through the chain (which *is* audited) and launches `mstsc` with no record of the interactive session | Medium |
-| F-04 | No absolute session lifetime | Only an idle timeout. Continuous activity keeps a credentialed session alive indefinitely | Medium |
+| F-04 | No absolute session lifetime | **Resolved 2026-09-01**: `ac connect --max-lifetime <secs>` bounds a session from connect regardless of activity; the watchdog closes it (`session.lifetime_timeout`). Tests in `test_session_lifetime.py` | — |
 | F-05 | `logging.level` is validated but never applied | The field is parsed, rejected if invalid, reported in `to_dict()` — and then ignored. Nothing filters records by level | Low, but misleading |
 | F-06 | `transport.log` and `errors.log` grow unbounded | Retention prunes `*.jsonl` and `*.md` only | Low |
 

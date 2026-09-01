@@ -197,7 +197,8 @@ Design choices with consequences, not defects. Each is stated in
     disables ad-hoc execution entirely (R-02).
 13. Verify the nested Windows path against real hardware and record the evidence
     (R-03).
-14. An **absolute session lifetime** alongside the idle timeout (F-04).
+14. ~~An **absolute session lifetime** alongside the idle timeout (F-04).~~
+    **Done 2026-09-01** — `ac connect --max-lifetime <secs>`.
 15. Optional **output filtering / classification** for regulated estates (R-06).
 
 ### Longer term (if the scope grows)

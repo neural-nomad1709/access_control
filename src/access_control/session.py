@@ -71,6 +71,10 @@ class Session:
     #: operation the catalog permits for this host".
     allowed_operations: tuple[str, ...] = ()
     idle_timeout_s: int = DEFAULT_IDLE_TIMEOUT_S
+    #: Absolute ceiling on the session's life, measured from connect and never
+    #: refreshed by activity (F-04). Bounds a continuously-driven session that
+    #: the idle timer alone would keep open forever. 0 = no ceiling (default).
+    max_lifetime_s: int = 0
     #: When the last leg fails but the bastion chain stood up, hold the session
     #: at the last hop that did authenticate instead of tearing it all down.
     #: The passwords are already typed; throwing them away to make the operator
@@ -451,8 +455,18 @@ class Session:
         return time.time() - self.last_used
 
     @property
+    def lifetime_s(self) -> float:
+        """Seconds since connect (0 if never connected)."""
+        return time.time() - self.connected_at if self.connected_at else 0.0
+
+    @property
+    def lifetime_expired(self) -> bool:
+        return self.max_lifetime_s > 0 and self.lifetime_s > self.max_lifetime_s
+
+    @property
     def expired(self) -> bool:
-        return self.idle_timeout_s > 0 and self.idle_s > self.idle_timeout_s
+        idle = self.idle_timeout_s > 0 and self.idle_s > self.idle_timeout_s
+        return idle or self.lifetime_expired
 
     @property
     def active(self) -> bool:
@@ -472,6 +486,12 @@ class Session:
             )
         if self.channel is None:
             raise SessionError(f"session {self.session_id} is not connected")
+        if self.lifetime_expired:
+            raise SessionError(
+                f"session {self.session_id} has reached its maximum lifetime of "
+                f"{int(self.max_lifetime_s / 60)} minutes and has expired. Credentials "
+                f"were not stored -- reconnect with:\n    uv run ac connect {self.host_id}"
+            )
         if self.expired:
             raise SessionError(
                 f"session {self.session_id} has been idle for {int(self.idle_s / 60)} minutes "
@@ -579,6 +599,11 @@ class Session:
             "idle_timeout_s": self.idle_timeout_s,
             "expires_in_s": (
                 max(0, round(self.idle_timeout_s - self.idle_s)) if self.idle_timeout_s else None
+            ),
+            "max_lifetime_s": self.max_lifetime_s,
+            "lifetime_remaining_s": (
+                max(0, round(self.max_lifetime_s - self.lifetime_s))
+                if self.max_lifetime_s else None
             ),
             "allowed_operations": list(self.allowed_operations),
             "authenticated_nodes": self.creds.known(),

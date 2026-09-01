@@ -301,12 +301,16 @@ class SessionServer:
         return self.session.close(status=status)
 
     def _watchdog(self) -> None:
-        """Close the session once it has been idle past its timeout."""
+        """Close the session once it is idle past its timeout or past its
+        absolute lifetime ceiling (F-04)."""
         while not self._stop.wait(WATCHDOG_INTERVAL_S):
             if self.session.expired:
                 if self.session.audit:
+                    lifetime = self.session.lifetime_expired
                     self.session.audit.emit(
-                        "session.idle_timeout", idle_s=round(self.session.idle_s, 1)
+                        "session.lifetime_timeout" if lifetime else "session.idle_timeout",
+                        idle_s=round(self.session.idle_s, 1),
+                        lifetime_s=round(self.session.lifetime_s, 1),
                     )
                 self._stop.set()
                 # Nudge accept() out of its timeout so serve_forever returns.
@@ -599,6 +603,7 @@ def build_session(
     catalog: Catalog | None = None,
     allowed_operations: tuple[str, ...] = (),
     idle_timeout_s: int | None = None,
+    max_lifetime_s: int | None = None,
     agent_id: str | None = None,
     prompter_name: str | None = None,
     fallback_to_hop: bool = True,
@@ -661,6 +666,8 @@ def build_session(
     )
     if idle_timeout_s is not None:
         session.idle_timeout_s = idle_timeout_s
+    if max_lifetime_s is not None:
+        session.max_lifetime_s = max_lifetime_s
     return session
 
 

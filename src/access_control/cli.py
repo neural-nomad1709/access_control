@@ -369,6 +369,12 @@ def connect(
     idle_timeout: int = typer.Option(
         1800, "--idle-timeout", help="Seconds of inactivity before the session closes (0 = never)"
     ),
+    max_lifetime: int = typer.Option(
+        0, "--max-lifetime",
+        help="Absolute seconds before the session closes regardless of activity "
+        "(0 = no ceiling). Bounds a continuously-driven session the idle timer "
+        "alone would keep open forever.",
+    ),
     no_shell: bool = typer.Option(
         False,
         "--no-shell",
@@ -426,6 +432,7 @@ def connect(
             host,
             allowed_operations=allowed,
             idle_timeout_s=idle_timeout,
+            max_lifetime_s=max_lifetime,
             agent_id=agent_id,
             fallback_to_hop=not no_fallback,
         )
@@ -605,6 +612,8 @@ def _status_panel(report: dict[str, Any], title: str) -> Panel:
     ]
     if report.get("expires_in_s") is not None:
         lines.append(f"expires in  {report['expires_in_s']}s of inactivity")
+    if report.get("lifetime_remaining_s") is not None:
+        lines.append(f"max life    {report['lifetime_remaining_s']}s remaining (absolute)")
     if report.get("log_file"):
         lines.append(f"audit       {report['log_file']}")
     if report.get("summary_file"):
