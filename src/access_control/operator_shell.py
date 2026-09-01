@@ -206,6 +206,16 @@ class OperatorShell:
     # -- approvals (D3: the human at this prompt is usually the approver) ---
 
     def _resolve_approval(self, args: list[str], decision: str) -> None:
+        if getattr(self.session, "agent_attached", False):
+            # R-01 through the side door: an agent holding this prompt must
+            # not resolve the request its own gated run filed. Approvals
+            # belong to a human surface — another operator shell, or the
+            # governance control plane.
+            self.err.print(
+                "[red]this session is agent-attached; approvals cannot be "
+                "resolved from inside it[/red]"
+            )
+            return
         gatekeeper = getattr(self.session, "gatekeeper", None)
         if gatekeeper is None or not hasattr(gatekeeper, "pending_approvals"):
             self.err.print(

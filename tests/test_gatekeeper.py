@@ -58,8 +58,10 @@ class TestNullGatekeeper:
     def test_is_todays_behaviour(self) -> None:
         gk = NullGatekeeper()
         assert gk.authorize("a", "t", {}, "s").allowed
+        # never "approved": nothing exists to grant one, so the engine falls
+        # back to the confirm gate — a plain install must not auto-approve
         ticket = gk.request_approval("a", "t", "cmd", "s")
-        assert ticket.status == "approved"
+        assert ticket.status == "not_governed"
         verdict = gk.scan_output("raw output", "a", "s")
         assert verdict.text == "raw output"
         assert not verdict.tainted

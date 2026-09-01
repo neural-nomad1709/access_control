@@ -505,7 +505,13 @@ class Engine:
         """Ad-hoc command -- the escape hatch used while diagnosing a failure."""
         try:
             self._authorize("ac_exec", {"command": command})
-            safety.check(command, confirmed=confirmed)
+            if getattr(self.session, "agent_attached", False):
+                # The escape hatch must not re-open self-approval: a governed
+                # agent's gated ad-hoc command takes the same out-of-band
+                # approval as a gated operation; --confirm never satisfies it.
+                self._check_exec_approval(command, confirmed)
+            else:
+                safety.check(command, confirmed=confirmed)
         except (CommandBlocked, PermissionRequired) as exc:
             if self.audit:
                 self.audit.action(
@@ -549,14 +555,47 @@ class Engine:
                 f"refused by governance policy: {decision.reason or 'default deny'}"
             )
 
-    def _scan_result(self, result: ExecResult) -> ExecResult:
-        """P3: remote output through the gatekeeper before any caller sees it.
+    def _check_exec_approval(self, command: str, confirmed: bool) -> None:
+        """Gate a governed agent's ad-hoc command out of band.
 
-        Redactions replace the text in place; a hostile finding taints the
-        session, which widens the approval net for the rest of it.
+        ALLOWED-class commands in an untainted session pass straight to the
+        deny-list check; anything gated (CONFIRM class, or any command once
+        the session is tainted) needs a human's out-of-band resolution — the
+        agent's own --confirm carries no weight. Ungoverned installs fall back
+        to today's confirm regime.
         """
+        tainted = getattr(self.session, "tainted", False)
+        if not tainted:
+            try:
+                safety.check(command, confirmed=False)
+                return  # ALLOWED class: nothing to gate
+            except PermissionRequired:
+                pass  # CONFIRM class: held below (CommandBlocked propagates)
+        ticket = self.gatekeeper.request_approval(
+            self._actor(), "ac_exec", command, self.session.session_id)
+        if ticket.status == "not_governed":
+            safety.check(command, confirmed=confirmed)
+            return
+        if ticket.status == "approved":
+            safety.check(command, confirmed=True)  # deny-list stays the last line
+            return
+        if ticket.status == "pending":
+            raise PermissionRequired(
+                f"command held for out-of-band approval (request {ticket.request_id}). "
+                f"A human resolves it with `:approve` in the operator shell or in the "
+                f"governance control plane; re-run once resolved:\n  {command}"
+            )
+        raise PermissionRequired(
+            f"command refused: approval request {ticket.request_id} is {ticket.status}. "
+            f"A lapsed or denied request never runs."
+        )
+
+    def _scan_text(self, text: str) -> str:
+        """One string of remote output through the gatekeeper; taint audited."""
+        if not text:
+            return text
         verdict = self.gatekeeper.scan_output(
-            result.stdout or "", self._actor(), self.session.session_id)
+            text, self._actor(), self.session.session_id)
         if verdict.tainted and not getattr(self.session, "tainted", False):
             self.session.tainted = True
             if self.audit:
@@ -565,8 +604,18 @@ class Engine:
                     findings=list(verdict.findings),
                     detail="hostile content in collected output; approvals widened",
                 )
-        if verdict.text != (result.stdout or ""):
-            result.stdout = verdict.text
+        return verdict.text
+
+    def _scan_result(self, result: ExecResult) -> ExecResult:
+        """P3: remote output through the gatekeeper before any caller sees it.
+
+        Both streams: tools routinely log to stderr, and a credential or an
+        injection there is no less real. Redactions replace the text in place;
+        a hostile finding taints the session, which widens the approval net
+        for the rest of it.
+        """
+        result.stdout = self._scan_text(result.stdout or "")
+        result.stderr = self._scan_text(result.stderr or "")
         return result
 
     # -- diagnostics ------------------------------------------------------
@@ -645,14 +694,9 @@ class Engine:
         if len(text) > MAX_COLLECT_CHARS:
             text = text[-MAX_COLLECT_CHARS:]
             entry["truncated"] = True
-        if text:
-            # P3: collected logs are exactly the channel prompt injection and
-            # leaked credentials arrive on; scan before the caller reads them.
-            verdict = self.gatekeeper.scan_output(
-                text, self._actor(), self.session.session_id)
-            if verdict.tainted:
-                self.session.tainted = True
-            text = verdict.text
+        # P3: collected logs are exactly the channel prompt injection and
+        # leaked credentials arrive on; scan before the caller reads them.
+        text = self._scan_text(text)
         entry["content"] = text or "(empty)"
         entry["exit_code"] = result.exit_code
         return entry
@@ -710,46 +754,58 @@ class Engine:
             # timeout is a denial. One approval authorizes one run.
             ticket = self.gatekeeper.request_approval(
                 self._actor(), op.id, commands, self.session.session_id)
-            if ticket.status == "approved":
+            if ticket.status == "not_governed":
+                # No external plane to hold an approval (plain install): the
+                # confirm gate stays the control, exactly as before. Without
+                # confirmation, fall through to the operator refusal below.
+                if confirmed:
+                    if self.audit:
+                        self.audit.emit(
+                            EV_PERMISSION, operation_id=op.id, gated=gated,
+                            confirmed=True, granted=True,
+                        )
+                    return False
+            else:
+                if ticket.status == "approved":
+                    if self.audit:
+                        self.audit.action(
+                            "PERMISSION_REQUEST",
+                            event=EV_PERMISSION,
+                            target=self.session.host_id,
+                            result="SUCCESS",
+                            detail=f"{op.id} approved out of band ({ticket.request_id})",
+                            operation_id=op.id,
+                            request_id=ticket.request_id,
+                            gated=True,
+                            granted=True,
+                        )
+                    return True
+                pending = ticket.status == "pending"
                 if self.audit:
                     self.audit.action(
                         "PERMISSION_REQUEST",
                         event=EV_PERMISSION,
                         target=self.session.host_id,
-                        result="SUCCESS",
-                        detail=f"{op.id} approved out of band ({ticket.request_id})",
+                        result="PENDING" if pending else "BLOCKED",
+                        detail=f"{op.id} {ticket.status} ({ticket.request_id})",
                         operation_id=op.id,
                         request_id=ticket.request_id,
                         gated=True,
-                        granted=True,
+                        granted=False,
                     )
-                return True
-            pending = ticket.status == "pending"
-            if self.audit:
-                self.audit.action(
-                    "PERMISSION_REQUEST",
-                    event=EV_PERMISSION,
-                    target=self.session.host_id,
-                    result="PENDING" if pending else "BLOCKED",
-                    detail=f"{op.id} {ticket.status} ({ticket.request_id})",
-                    operation_id=op.id,
-                    request_id=ticket.request_id,
-                    gated=True,
-                    granted=False,
-                )
-            if pending:
+                if pending:
+                    raise PermissionRequired(
+                        f"operation '{op.id}' on host '{self.session.host_id}' is held for "
+                        f"out-of-band approval (request {ticket.request_id}).\n"
+                        f"A human resolves it with `:approve` in the operator shell or in the "
+                        f"governance control plane; re-run once resolved. The request lapses "
+                        f"into a denial if nobody acts. Commands awaiting approval:\n{commands}"
+                    )
                 raise PermissionRequired(
-                    f"operation '{op.id}' on host '{self.session.host_id}' is held for "
-                    f"out-of-band approval (request {ticket.request_id}).\n"
-                    f"A human resolves it with `:approve` in the operator shell or in the "
-                    f"governance control plane; re-run once resolved. The request lapses "
-                    f"into a denial if nobody acts. Commands awaiting approval:\n{commands}"
+                    f"operation '{op.id}' on host '{self.session.host_id}' was refused: "
+                    f"approval request {ticket.request_id} is {ticket.status}. "
+                    f"A lapsed or denied request never runs; file a new run to ask again."
                 )
-            raise PermissionRequired(
-                f"operation '{op.id}' on host '{self.session.host_id}' was refused: "
-                f"approval request {ticket.request_id} is {ticket.status}. "
-                f"A lapsed or denied request never runs; file a new run to ask again."
-            )
 
         if self.audit:
             self.audit.action(

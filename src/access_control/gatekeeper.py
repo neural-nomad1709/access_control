@@ -85,9 +85,10 @@ class NullGatekeeper:
 
     def request_approval(self, actor: str, tool: str, rendered_commands: str,
                          session: str) -> ApprovalTicket:
-        # The confirm gate in engine._check_permission is the real control
-        # here; this ticket just says "no external gate objects".
-        return ApprovalTicket(request_id="null", status="approved")
+        # No external plane exists to hold an approval, so nothing here may
+        # claim one was granted: "not_governed" tells the engine to fall back
+        # to the confirm gate — today's behaviour, never an auto-approval.
+        return ApprovalTicket(request_id="null", status="not_governed")
 
     def scan_output(self, text: str, actor: str, session: str) -> ScanVerdict:
         return ScanVerdict(text=text)
@@ -143,10 +144,13 @@ _BLOCK_REASONS = {"block": "TOOL_DENIED", "ask": "HITL_REQUIRED"}
 class LighthouseGatekeeper:
     """Gatekeeper backed by an embedded AgentLighthouse runtime.
 
-    Phase 1 scope: ``receipt()`` mirrors every canonical audit action into
-    AL's Ed25519-signed, hash-chained ledger (verifiable offline with
-    ``al-verify``). The decision methods still behave like ``NullGatekeeper``;
-    enforcement arrives in Phase 2 behind the same interface.
+    ``receipt()`` mirrors every canonical audit action into AL's
+    Ed25519-signed, hash-chained ledger (verifiable offline with
+    ``al-verify``); ``authorize()`` applies the identity-bound default-deny
+    tool policy; ``request_approval()`` holds gated work for out-of-band human
+    resolution (one approval, bound to the exact rendered commands, authorizes
+    one run; timeout is a denial); ``scan_output()`` screens collected output
+    and taints the session on hostile content.
 
     Requires the ``access-control[lighthouse]`` extra; constructing it without
     ``al_core`` installed raises ImportError.
@@ -187,9 +191,17 @@ class LighthouseGatekeeper:
             **overrides,
         )
         self._ledger_path = data_dir / "ledger.jsonl"
-        # One held approval per (session, tool): the ticket the engine polls
-        # by re-running. Resolution consumes it — one approval, one run.
-        self._held: dict[tuple[str, str], str] = {}
+        # One held approval per (session, tool, exact rendered commands): the
+        # ticket the engine polls by re-running. Binding to the commands means
+        # an approval for one command line can never authorize another.
+        # Resolution consumes it — one approval, one run. Rehydrated from AL's
+        # store so a daemon restart cannot orphan a pending request.
+        self._held: dict[tuple[str, str, str], str] = {}
+        for request in self._runtime.action_gate.hitl.pending():
+            self._held[
+                (request.session or "", request.tool,
+                 self._commands_key(request.detail or ""))
+            ] = request.request_id
 
     # -- decisions -----------------------------------------------------------
 
@@ -208,37 +220,46 @@ class LighthouseGatekeeper:
                    + (f" ({findings})" if findings else ""),
         )
 
+    @staticmethod
+    def _commands_key(rendered_commands: str) -> str:
+        import hashlib
+
+        return hashlib.sha256(rendered_commands.encode("utf-8")).hexdigest()
+
     def request_approval(self, actor: str, tool: str, rendered_commands: str,
                          session: str) -> ApprovalTicket:
-        """File or poll the held approval for (session, tool).
+        """File or poll the held approval for these exact rendered commands.
 
-        First call submits a pending request (resolved out of band via the AL
-        control plane or the operator shell); subsequent calls poll it. A
-        resolution or lapse consumes the request — one approval authorizes one
-        run, and timeout remains a denial.
+        First call submits a pending request carrying the commands (resolved
+        out of band via the AL control plane or the operator shell);
+        subsequent calls with the same commands poll it. A resolution or lapse
+        consumes the request — one approval authorizes one run of exactly what
+        was approved, and timeout remains a denial.
         """
         hitl = self._runtime.action_gate.hitl
-        key = (session, tool)
+        key = (session, tool, self._commands_key(rendered_commands))
         request_id = self._held.get(key)
         if request_id is None:
-            request = hitl.submit(actor, tool)
+            request = hitl.submit(actor, tool, detail=rendered_commands,
+                                  session=session)
             self._held[key] = request.request_id
             return ApprovalTicket(request_id=request.request_id, status="pending")
         status = hitl.status(request_id)
         if status == "pending":
             return ApprovalTicket(request_id=request_id, status="pending")
         del self._held[key]  # resolved or lapsed: consumed either way
-        if status == "approved":
-            return ApprovalTicket(request_id=request_id, status="approved")
         return ApprovalTicket(request_id=request_id, status=status)
 
     def pending_approvals(self) -> list[dict[str, Any]]:
-        """Pending requests, for the operator shell's :approve verb."""
+        """Pending requests, for the operator shell's :approve verb. ``detail``
+        is what will actually run — the approver reads it, not the tool name."""
         hitl = self._runtime.action_gate.hitl
         return [{
             "request_id": r.request_id,
             "actor": r.actor,
             "tool": r.tool,
+            "detail": r.detail,
+            "session": r.session,
             "remaining_s": hitl.remaining_s(r.request_id),
         } for r in hitl.pending()]
 

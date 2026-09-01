@@ -38,15 +38,16 @@ class ApprovableGatekeeper:
 class ShellSession:
     """The slice of Session the :approve verb touches."""
 
-    def __init__(self, gatekeeper: Any) -> None:
+    def __init__(self, gatekeeper: Any, *, agent_attached: bool = False) -> None:
         self.gatekeeper = gatekeeper
+        self.agent_attached = agent_attached
         self.audit = None
 
 
-def make_shell(gatekeeper: Any):
+def make_shell(gatekeeper: Any, *, agent_attached: bool = False):
     out, err = io.StringIO(), io.StringIO()
     shell = OperatorShell(
-        ShellSession(gatekeeper),
+        ShellSession(gatekeeper, agent_attached=agent_attached),
         Console(file=out, force_terminal=False, width=120),
         Console(file=err, force_terminal=False, width=120),
     )
@@ -87,6 +88,15 @@ class TestApproveVerb:
         shell, _, err = make_shell(NullGatekeeper())
         shell._meta("approve")
         assert "governance" in err.getvalue().lower()
+
+    def test_an_agent_driven_shell_cannot_resolve_approvals(self) -> None:
+        """R-01 through the side door: an agent holding the prompt on its own
+        session must not resolve the request its own gated run filed."""
+        gk = ApprovableGatekeeper()
+        shell, _, err = make_shell(gk, agent_attached=True)
+        shell._meta("approve hitl_abc123")
+        assert gk.resolutions == []
+        assert "agent" in err.getvalue().lower()
 
     def test_help_mentions_the_verb(self) -> None:
         shell, out, _ = make_shell(ApprovableGatekeeper())

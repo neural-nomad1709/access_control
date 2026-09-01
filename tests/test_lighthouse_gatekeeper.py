@@ -226,6 +226,51 @@ class TestApprovalLifecycle:
         rows = governed.pending_approvals()
         assert [r["request_id"] for r in rows] == [ticket.request_id]
         assert rows[0]["tool"] == "install-app"
+        assert rows[0]["detail"] == "cmd", (
+            "the approver must see the rendered commands, not just a tool name"
+        )
+
+    def test_an_approval_is_bound_to_the_exact_commands(self, governed) -> None:
+        """Approve `install myapp`, run `install malware`? No: different
+        rendered commands are a different request."""
+        benign = governed.request_approval(AGENT, "install-app",
+                                           "apt-get install -y myapp", "SES-1")
+        governed.resolve_approval(benign.request_id, "allow", by="user:amit")
+        hostile = governed.request_approval(AGENT, "install-app",
+                                            "apt-get install -y malware", "SES-1")
+        assert hostile.status == "pending", (
+            "an approval for other commands must not authorize these"
+        )
+        # while the benign commands are still approved
+        assert governed.request_approval(
+            AGENT, "install-app", "apt-get install -y myapp", "SES-1"
+        ).status == "approved"
+
+    def test_held_requests_survive_a_gatekeeper_restart(self, tmp_path: Path) -> None:
+        """The AL store rehydrates pending approvals; the gatekeeper must
+        re-associate them, or a post-restart approval could never authorize
+        the run that asked for it."""
+        policy = tmp_path / "tool-policy.yaml"
+        policy.write_text(POLICY_YAML, encoding="utf-8")
+        gk = LighthouseGatekeeper(data_dir=tmp_path / "al-data",
+                                  tool_policy_path=policy)
+        ticket = gk.request_approval(AGENT, "install-app", "apt-get install -y x", "SES-1")
+        gk.close()
+
+        gk2 = LighthouseGatekeeper(data_dir=tmp_path / "al-data",
+                                   tool_policy_path=policy)
+        try:
+            # the same held request is still the one being polled — no duplicate
+            again = gk2.request_approval(AGENT, "install-app",
+                                         "apt-get install -y x", "SES-1")
+            assert again.request_id == ticket.request_id
+            assert again.status == "pending"
+            gk2.resolve_approval(ticket.request_id, "allow", by="user:amit")
+            done = gk2.request_approval(AGENT, "install-app",
+                                        "apt-get install -y x", "SES-1")
+            assert done.status == "approved"
+        finally:
+            gk2.close()
 
 
 class TestScanOutput:

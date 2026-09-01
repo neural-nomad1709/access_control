@@ -163,6 +163,62 @@ class TestP2Approval:
         assert gk2.approval_requests == []
 
 
+class TestP2UngovernedFallback:
+    """A plain install (NullGatekeeper) must behave exactly as before Phase 2:
+    the confirm gate is the control, for agents too — never an auto-approval."""
+
+    def test_an_ungoverned_agent_still_faces_the_confirm_gate(self, make_session) -> None:
+        session = make_session("win01")
+        session.agent_attached = True
+        engine = Engine(session)  # default NullGatekeeper
+        with pytest.raises(PermissionRequired):
+            engine.run_operation("needs-approval")
+        assert session.commands == []
+
+    def test_an_ungoverned_agent_with_confirm_runs_as_today(self, make_session) -> None:
+        session = make_session("win01")
+        session.agent_attached = True
+        outcome = Engine(session).run_operation("needs-approval", confirmed=True)
+        assert outcome.ok
+
+
+class TestP2AdHocCommands:
+    """The escape hatch must not re-open R-01: a governed agent's gated
+    ad-hoc command goes through the same out-of-band approval, --confirm or
+    not. Humans and ungoverned installs keep today's behaviour."""
+
+    def test_a_governed_agents_gated_exec_cannot_self_approve(
+        self, governed_engine
+    ) -> None:
+        engine, session, gk = governed_engine(
+            agent=True, approval_statuses=["pending"])
+        with pytest.raises(PermissionRequired, match="hitl_scripted"):
+            engine.run_command("Restart-Service W3SVC", confirmed=True)
+        assert session.commands == []
+        actor, tool, rendered, _ = gk.approval_requests[0]
+        assert tool == "ac_exec"
+        assert "Restart-Service W3SVC" in rendered
+
+    def test_an_approved_gated_exec_runs_once(self, governed_engine) -> None:
+        engine, session, gk = governed_engine(
+            agent=True, approval_statuses=["approved"])
+        result = engine.run_command("Restart-Service W3SVC")
+        assert result.exit_code == 0
+        assert session.commands == ["Restart-Service W3SVC"]
+
+    def test_an_allowed_class_exec_needs_no_approval(self, governed_engine) -> None:
+        engine, session, gk = governed_engine(agent=True)
+        engine.run_command("Get-Service W3SVC")
+        assert gk.approval_requests == []
+        assert session.commands == ["Get-Service W3SVC"]
+
+    def test_humans_keep_the_confirm_regime_for_exec(self, governed_engine) -> None:
+        engine, session, gk = governed_engine(agent=False)
+        engine.run_command("Restart-Service W3SVC", confirmed=True)
+        assert gk.approval_requests == []
+        assert session.commands == ["Restart-Service W3SVC"]
+
+
 # -- P3: output scanning and taint ---------------------------------------------------
 
 class TestP3OutputScan:
@@ -196,6 +252,44 @@ class TestP3OutputScan:
         collected = [c for s in outcome.steps for c in s.collected]
         assert collected, "the fixture operation collects on failure"
         assert all(SECRET not in (c.get("content") or "") for c in collected)
+
+    def test_stderr_is_scanned_too(self, make_session) -> None:
+        """Tools routinely log to stderr; a credential or injection there must
+        not ride past the gate while stdout gets scanned."""
+        from access_control.transport.base import ExecResult
+
+        def leaky(command: str) -> ExecResult:
+            return ExecResult(node_id="win01", channel="fake", command=command,
+                              exit_code=0, stdout="hello win01",
+                              stderr=f"warn: token {SECRET} expired")
+
+        session = make_session("win01", responder=leaky)
+        gk = ScriptedGatekeeper()
+        outcome = Engine(session, gatekeeper=gk).run_operation(
+            "echo-op", {"message": "hello"})
+        for step in outcome.steps:
+            if step.result is not None:
+                assert SECRET not in (step.result.stderr or "")
+
+    def test_taint_found_in_collection_is_audited(self, make_session, tmp_path) -> None:
+        from access_control.audit import AuditLog
+        from access_control.transport.base import ExecResult
+
+        def responder(command: str) -> ExecResult:
+            if "tail" in command or "Get-Content" in command:
+                return ExecResult(node_id="win01", channel="fake", command=command,
+                                  exit_code=0, stdout=f"log: {INJECTION}")
+            return ExecResult(node_id="win01", channel="fake", command=command,
+                              exit_code=1603, stdout="about to fail")
+
+        audit = AuditLog(session_id="SES-t", agent_id="pytest",
+                         directory=tmp_path / "logs")
+        session = make_session("win01", responder=responder, audit=audit)
+        Engine(session, gatekeeper=ScriptedGatekeeper()).run_operation("failing-op")
+        assert session.tainted
+        assert any(r["event"] == "session.tainted" for r in audit.records), (
+            "taint discovered during collection must be audited"
+        )
 
     def test_an_injection_finding_taints_the_session_and_widens_approval(
         self, make_session
