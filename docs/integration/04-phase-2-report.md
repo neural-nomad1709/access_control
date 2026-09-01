@@ -65,9 +65,32 @@ NullGatekeeper installs are unchanged).
   expectation_reason); an operation whose expectation matches secret-shaped text
   would now fail its expectation — none in the shipped catalogue does.
 
+## Code review (2026-09-01)
+
+8 findings; all addressed test-first (ac suite now **419 passed**, AL **687**):
+
+1. **Fail-open on plain installs (worst)** — `NullGatekeeper` returned "approved",
+   so an agent-attached gated op ran unconfirmed. It now returns "not_governed"
+   and the engine falls back to the confirm gate — pre-Phase-2 behaviour exactly.
+2. **`ac exec` self-approval** — a governed agent's gated ad-hoc command now takes
+   the same out-of-band approval; `--confirm` carries no weight, and a tainted
+   session gates every agent exec.
+3. **Blind, unbound approvals** — `HitlGate.submit` gained `detail` (the rendered
+   commands) + `session`, persisted and shown on every surface (AL-side change);
+   held tickets are keyed by (session, tool, sha256(commands)) so an approval for
+   one command line can never authorize another.
+4. **stderr unscanned** — both streams pass the gate now.
+5. **`:approve` from an agent-driven shell** — refused; approvals are a human
+   surface.
+6. **Orphaned approvals after daemon restart** — `_held` rehydrates from AL's
+   store using session+tool+commands.
+7. **Silent taint from collection** — shared `_scan_text` helper; taint is always
+   audited as `session.tainted`.
+8. Stale "enforcement arrives in Phase 2" docstring rewritten.
+
 ## Open risks
 
-- Taint gates operations only (`_check_permission`); a tainted **human** session
-  can still run allowed `ac_exec` commands with the deny-list alone — same as
-  today. Widening ac_exec under taint is a candidate hardening.
+- A tainted **agent** session now gates every `ac_exec`; a tainted **human**
+  session still runs allowed commands under the deny-list alone — the human at
+  the prompt is the approver, so there is nobody senior to escalate to.
 - The scanners' false-negative space (regex baseline) is inherited and documented.
