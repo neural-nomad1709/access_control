@@ -47,6 +47,11 @@ agents:
     deny:
       # The escape hatch the catalogue itself gates twice over.
       - { tool: run-command.exec }
+    budgets:
+      # Generous tripwire on the sliding 60s window (see mcp-tool-policy.yaml).
+      # Steps in an operation each count as a call, so this sits well above a
+      # normal multi-step run and only trips a runaway loop.
+      max_tool_calls_per_min: 120
 
   # Unlisted identities: deny everything (fail-closed floor). Do not add
   # rules here — add a named identity block instead.

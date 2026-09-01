@@ -39,6 +39,13 @@ agents:
       # The ad-hoc escape hatch is not reachable through the mediated path;
       # diagnosis that needs it goes through a human-approved run.
       - { tool: ac_run_command }
+    budgets:
+      # A generous tripwire, not a throttle: a human operator investigating an
+      # incident runs a handful of tools a minute; 120/min only trips on a
+      # runaway loop. Enforced at the ActionGate as a sliding 60s window — the
+      # 121st call in any rolling minute denies with BUDGET_EXCEEDED (receipted)
+      # and the window heals itself. Lower it per identity for tighter control.
+      max_tool_calls_per_min: 120
 
   # Unknown identities: deny every tool (fail-closed floor).
   default:
