@@ -22,6 +22,20 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
 ]
+# AgentLighthouse governance plane, embedded (LighthouseGatekeeper). During
+# development this points at the sibling clone; al-verify must be pinned as a
+# source too because al-core's own dependency on it is a uv-workspace source,
+# invisible to an external consumer.
+lighthouse = [
+    "al-core",
+]
+
+[tool.uv.sources]
+# editable: AL's .gitignore has a `keys` pattern (signing-key material), and a
+# wheel built from the path drops the al_core.keys package with it. The source
+# tree, not a build, is the dependency during development.
+al-core = { path = "../AgentLighthouse/core", editable = true }
+al-verify = { path = "../AgentLighthouse/verify", editable = true }
 
 [project.scripts]
 ac = "access_control.cli:main"

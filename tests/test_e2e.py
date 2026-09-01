@@ -195,6 +195,7 @@ def make_session(
     *,
     allowed: tuple[str, ...] = (),
     fallback_to_hop: bool = False,
+    sink=None,
 ) -> Session:
     inventory = load_inventory(config / "inventory.yaml")
     catalog = load_operations(config / "operations.yaml")
@@ -211,6 +212,7 @@ def make_session(
             agent_id="pytest-e2e",
             host_id="app01",
             directory=tmp_path / "audit",
+            sink=sink,
         ),
         allowed_operations=allowed,
         # Off by default here so a test that expects a failure sees the

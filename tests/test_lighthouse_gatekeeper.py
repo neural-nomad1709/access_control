@@ -1,0 +1,167 @@
+"""LighthouseGatekeeper — the audit trail mirrored into a signed, chained ledger.
+
+Every canonical audit action is also appended, through the `al_core.embed`
+facade, to an AgentLighthouse receipt ledger: Ed25519-signed, hash-chained,
+verifiable offline by `al-verify` (whose only dependency is `cryptography`).
+The JSONL trail is unchanged — the ledger is a second, tamper-evident form.
+
+These tests need the optional `[lighthouse]` extra; a plain install skips them
+(the NullGatekeeper path is covered in test_gatekeeper.py and the rest of the
+suite).
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip("al_core", reason="requires the [lighthouse] extra")
+
+from al_verify.verify import VerificationError, verify_chain  # noqa: E402
+
+from access_control.audit import AuditLog  # noqa: E402
+from access_control.engine import Engine  # noqa: E402
+from access_control.gatekeeper import LighthouseGatekeeper  # noqa: E402
+
+
+@pytest.fixture
+def gatekeeper(tmp_path: Path):
+    gk = LighthouseGatekeeper(data_dir=tmp_path / "al-data")
+    yield gk
+    gk.close()
+
+
+def ledger_records(gk: LighthouseGatekeeper) -> list[dict]:
+    lines = Path(gk.ledger_path).read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines if line.strip()]
+
+
+def mirrored(gk: LighthouseGatekeeper) -> list[dict]:
+    """The receipts this gatekeeper mirrored (AL's own boot receipts excluded)."""
+    return [r for r in ledger_records(gk) if not r["action"] == "config_change"]
+
+
+class TestReceiptMapping:
+    def _emit(self, gk: LighthouseGatekeeper, action: str, result: str,
+              target: str = "win01") -> None:
+        gk.receipt(
+            timestamp="2026-08-31T00:00:00.000+00:00", seq=1,
+            agentId="AGT-test-3f9a1c", sessionId="SES-3f9a1c",
+            event=action.lower(), action=action, source="local",
+            target=target, result=result,
+        )
+
+    def test_session_lifecycle_maps_to_open_and_close(self, gatekeeper) -> None:
+        self._emit(gatekeeper, "SESSION_START", "SUCCESS")
+        self._emit(gatekeeper, "SSH_CONNECT", "SUCCESS", target="bastion1")
+        self._emit(gatekeeper, "SESSION_END", "SUCCESS")
+        actions = [r["action"] for r in mirrored(gatekeeper)]
+        assert actions == ["session_open", "session_open", "session_close"]
+
+    def test_execution_and_refusals_map_to_remote_exec(self, gatekeeper) -> None:
+        self._emit(gatekeeper, "COMMAND_EXECUTE", "SUCCESS")
+        self._emit(gatekeeper, "COMMAND_BLOCKED", "BLOCKED")
+        self._emit(gatekeeper, "LOG_COLLECT", "FAILURE")
+        records = mirrored(gatekeeper)
+        assert [r["action"] for r in records] == ["remote_exec"] * 3
+        assert [r["verdict"] for r in records] == ["allow", "block", "allow"]
+        assert records[1]["block_reason"] == "TOOL_DENIED"
+
+    def test_permission_requests_keep_their_name(self, gatekeeper) -> None:
+        self._emit(gatekeeper, "PERMISSION_REQUEST", "BLOCKED", target="restart-iis")
+        record = mirrored(gatekeeper)[0]
+        assert record["action"] == "permission_request"
+        assert record["verdict"] == "block"
+
+    def test_identity_and_provenance_survive_the_mapping(self, gatekeeper) -> None:
+        self._emit(gatekeeper, "COMMAND_EXECUTE", "SUCCESS", target="lin01")
+        record = mirrored(gatekeeper)[0]
+        assert record["actor"] == "spiffe://access-control/agent/AGT-test-3f9a1c"
+        assert record["session"] == "SES-3f9a1c"
+        # the original canonical action rides in the target, so nothing is lost
+        assert record["target"] == "COMMAND_EXECUTE:lin01"
+
+
+class TestLedgerIntegrity:
+    def test_the_whole_ledger_verifies(self, gatekeeper) -> None:
+        for action, result in (("SESSION_START", "SUCCESS"),
+                               ("COMMAND_EXECUTE", "SUCCESS"),
+                               ("SESSION_END", "SUCCESS")):
+            gatekeeper.receipt(agentId="AGT-x", sessionId="SES-x",
+                               action=action, result=result, target="win01")
+        count = verify_chain(ledger_records(gatekeeper), gatekeeper.public_key)
+        assert count >= 3
+
+    def test_tampering_with_one_record_fails_verification(self, gatekeeper) -> None:
+        gatekeeper.receipt(agentId="AGT-x", sessionId="SES-x",
+                           action="COMMAND_EXECUTE", result="SUCCESS", target="win01")
+        records = ledger_records(gatekeeper)
+        victim = next(r for r in records if r["action"] == "remote_exec")
+        victim["target"] = "COMMAND_EXECUTE:some-other-host"
+        with pytest.raises(VerificationError):
+            verify_chain(records, gatekeeper.public_key)
+
+
+class TestEndToEndOverFakeSSH:
+    def test_a_real_session_produces_a_verifiable_ledger(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from sshfake import AuthPolicy, CommandResult, FakeSSHServer
+        from test_e2e import (
+            BASTION_PASSWORD,
+            TARGET_PASSWORD,
+            ScriptedPrompter,
+            build_config,
+            make_session,
+        )
+
+        monkeypatch.setenv("AC_DATA_DIR", str(tmp_path / "data"))
+        monkeypatch.setenv("AC_KNOWN_HOSTS", str(tmp_path / "known_hosts"))
+        monkeypatch.setenv("AC_HOST_KEY_POLICY", "accept-new")
+
+        import paramiko
+
+        key = paramiko.RSAKey.generate(2048)
+        key_path = tmp_path / "id_test"
+        key.write_private_key_file(str(key_path))
+
+        gk = LighthouseGatekeeper(data_dir=tmp_path / "al-data")
+        bastion = FakeSSHServer(
+            "bastion",
+            policy=AuthPolicy(username="opuser", password=BASTION_PASSWORD,
+                              require_key_then_password=True),
+            responder=lambda cmd: CommandResult(stdout="bastion\n"),
+        )
+        target = FakeSSHServer(
+            "app01",
+            policy=AuthPolicy(username="opuser", password=TARGET_PASSWORD),
+            responder=lambda cmd: CommandResult(stdout="app01\n"),
+        )
+        try:
+            with bastion, target:
+                config = build_config(tmp_path, bastion.port, target.port, key_path)
+                prompter = ScriptedPrompter({
+                    "Test bastion": BASTION_PASSWORD,
+                    "Test application server": TARGET_PASSWORD,
+                })
+                session = make_session(config, prompter, tmp_path, sink=gk.receipt)
+                session.connect()
+                engine = Engine(session, gatekeeper=gk)
+                result = engine.run_command("uname -a")
+                assert result.exit_code == 0
+                session.close()
+        finally:
+            gk.close()
+
+        records = ledger_records(gk)
+        count = verify_chain(records, gk.public_key)
+        assert count == len(records) and count > 3
+        actions = [r["action"] for r in records]
+        assert "session_open" in actions
+        assert "remote_exec" in actions
+        assert "session_close" in actions
+        # and the JSONL trail is still written, unchanged in form
+        jsonl = list((tmp_path / "audit").glob("*.jsonl"))
+        assert jsonl, "the local JSONL audit trail must be unaffected"
