@@ -241,8 +241,21 @@ Running it in production — monitoring, backup, maintenance and upgrades — is
 | [docs/CLAUDE_PRODUCTION_GUARDRAILS.md](docs/CLAUDE_PRODUCTION_GUARDRAILS.md) | Deploying Claude against a live production session |
 | [docs/guides/features.md](docs/guides/features.md) | Every feature, and how it compares to plink, Ansible, mRemoteNG, Teleport and PAM tools |
 | [docs/implementation/](docs/implementation/README.md) | Module contracts, CLI reference, audit events, wire protocol |
+| [docs/integration/](docs/integration/) | Optional AgentLighthouse governance integration — per-phase reports, MCP proxy and SIEM guides |
 | [docs/guides/testing.md](docs/guides/testing.md) | Test strategy and the two end-to-end loops |
 | [STATUS.md](STATUS.md) · [BugFixNchange.md](BugFixNchange.md) | Current state, and what is fixed or open |
+
+### Optional: AgentLighthouse governance
+
+A plain install is fully standalone and behaves exactly as this README
+describes. With the optional `access-control[lighthouse]` extra, the tool can
+run behind [AgentLighthouse](https://github.com/neural-nomad1709/agentlighthouse)
+as its governance plane: out-of-band human approval that a flag cannot satisfy,
+identity-bound default-deny tool policy, output scanning with taint escalation,
+and a signed, hash-chained receipt ledger verifiable offline with `al-verify`.
+The seam is a single `Gatekeeper` interface whose default (`NullGatekeeper`)
+changes nothing; the integration is opt-in and documented in
+[docs/integration/](docs/integration/).
 
 **Deciding whether this is the right tool?** Start with
 [docs/guides/features.md](docs/guides/features.md). It is candid about where
