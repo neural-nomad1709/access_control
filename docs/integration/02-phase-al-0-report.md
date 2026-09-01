@@ -59,6 +59,32 @@ Date: 2026-08-31 · Branch: `wip/phase-al-0` (AgentLighthouse) · 5 commits
 - Amit's uncommitted `README.md` trademark-line edit and untracked `paper/` remain
   untouched in the working tree, per instruction.
 
+## Code review (2026-08-31)
+
+8 findings confirmed; all addressed test-first (suite now **683 passed**):
+
+1. Adapter used detect-secrets' process-global `transient_settings`; concurrent
+   scans raced and one could run with zero plugins (silent fail-open) → detector
+   instances now built once in `__init__`, `analyze_line` called directly.
+2. Approvals endpoints ignored `principal.org` → both are now org-scoped; resolving
+   another tenant's request is 404 (never leaked).
+3. Backward wall-clock step across restart could extend/reset a deadline → rows with
+   negative age are dropped as lapsed (fail closed); docstring claims corrected.
+4. Private-key hits were stripped at the armor header, delivering the key body →
+   `Private Key` type blocks outright.
+5. Enabling the adapter without the library did NOT refuse at boot (first scan
+   became SCANNER_FAILED forever) → constructor imports the library; refusal is at
+   boot as documented.
+6. Rehydration loaded resolved/lapsed rows forever; an approved id was a
+   never-expiring allow-token → only pending rows rehydrate, resolutions delete
+   their row, lapsed rows are pruned at load.
+7. A secret repeated on one line was redacted once → every occurrence redacted.
+8. Change-narrative docstrings → rewritten to forward-looking rationale.
+
+Two review candidates were refuted (resolution receipts' `mcp_tool_call` action is
+consistent with the gate's own ask receipts; the `al hitl` default port matches
+`al run`).
+
 ## Open risks
 
 - The `al hitl` CLI needs the control plane running; there is no offline fallback
