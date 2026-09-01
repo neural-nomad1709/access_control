@@ -66,6 +66,24 @@ Amit chose to make it real rather than document a hollow field; hence deliverabl
   ac side uses `permission_request`; aligning AL's endpoint is a small follow-up,
   not blocking.
 
+## Code review (2026-09-01)
+
+5 findings; all addressed test-first (ac **462**, AL **699**):
+
+1. **F-04 ceiling refreshed by retry (worst)** — the lifetime clock anchored on
+   `connected_at`, which `:retry` and fall-back-to-hop reset, so a flaky leg kept
+   a session open past its ceiling. Now anchored on `established_at`, set once at
+   first connect, never moved.
+2. **Budget consumed before HITL/DLP/chain** — a held or later-blocked call burned
+   a slot. The consume is now the last gate, only on a call that will proceed.
+3. **`max_tool_calls_per_min: 0` = total lockout** — now treated as *no budget*
+   (0/negative), matching the `0 = disabled` convention of the timeout flags.
+4. **"maximum lifetime of 0 minutes"** for any sub-hour cap — reports seconds
+   below a minute now.
+5. **Unlocked window race** — `BudgetTracker.check_and_consume` now holds a lock;
+   the gate serves from a thread pool and the read-modify-write could overrun the
+   cap.
+
 ## Open risks
 
 - The budget is a tripwire at 120/min, not a fine throttle; tune per identity.

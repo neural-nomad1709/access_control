@@ -6,7 +6,7 @@ without re-deriving it._
 | | |
 |---|---|
 | Version | `0.1.0` |
-| Tests | **460 passing** (`uv run pytest`, fully offline, ~25 s; 27 need the `[lighthouse]` extra and skip on a plain install) |
+| Tests | **462 passing** (`uv run pytest`, fully offline, ~25 s; 27 need the `[lighthouse]` extra and skip on a plain install) |
 | Source | ~11 000 lines across 27 modules in `src/access_control` |
 | Documentation | Complete as of the 2026-08-17 audit — see [docs/README.md](docs/README.md) |
 | Version control | On `main`, pushed to GitHub. `src/access_control/credentials.py` is tracked — the old `*credential*` ignore pattern was narrowed to credential material only (`credentials.json`, `*credentials.y*ml`, `*credentials.txt`); see [2026-08-20 follow-ups](#follow-ups-owed-from-this-session) |
@@ -31,7 +31,7 @@ in the workspace; per-phase reports in [docs/integration/](docs/integration/).
 | 1 — evidence (Gatekeeper seam, receipt sink) | **Done, review-clean** | `wip/phase-1-evidence` | [03-phase-1-report.md](docs/integration/03-phase-1-report.md); tests 351 → 372; fake-SSH e2e ledger verifies, tamper detected; 8 review findings fixed |
 | 2 — enforcement (three engine.py call sites) | **Done, review-clean** | `wip/phase-2-enforcement` | [04-phase-2-report.md](docs/integration/04-phase-2-report.md); tests 372 → 419; acceptance a–d proven with the real gatekeeper; 8 review findings fixed |
 | 3 — mediated agent path (MCP) | **Done, review-clean** | `wip/phase-3-mcp` | [05-phase-3-report.md](docs/integration/05-phase-3-report.md); tests 419 → 447; agent runs read-only op via proxy, every hop receipted, drift refused; 8 review findings fixed |
-| 4 — governance | **Done, review pending** | `wip/phase-4-governance` (both repos) | [06-phase-4-report.md](docs/integration/06-phase-4-report.md); ac 447 → 460, AL 687 → 696; F-04, real budget enforcement, attestation test, SIEM doc |
+| 4 — governance | **Done, review pending** | `wip/phase-4-governance` (both repos) | [06-phase-4-report.md](docs/integration/06-phase-4-report.md); ac 447 → 462, AL 687 → 699; 5 review findings fixed; F-04, real budget enforcement, attestation test, SIEM doc |
 
 ### Phase 4 delivered (Amit's calls: budgets enforced, SIEM doc-only, attestation test)
 
