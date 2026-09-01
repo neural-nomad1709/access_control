@@ -60,6 +60,29 @@ Date: 2026-09-01 · Branch: `wip/phase-3-mcp` (access_control) · 2 commits
   running ac itself under a LighthouseGatekeeper as well (Phases 1–2) is the
   belt-and-braces posture and is independent of this wiring.
 
+## Code review (2026-09-01)
+
+8 findings; all addressed test-first (ac suite now **447 passed**):
+
+1. **Deny list too narrow (worst)** — missed `ac shell`/`rdp`/`tunnel`, the
+   unmediated `ac mcp` pipe, and general shells (pwsh/powershell/python). R-11's
+   "only door" was false. Deny list expanded; pinned by test.
+2. **Engine honored `confirmed` for agents on not_governed** — the no-self-approval
+   invariant lived only in the MCP wrapper's `confirmed`-strip. The engine now
+   REFUSES a gated op or exec for an agent-attached session with no governance
+   plane, `--confirm` or not.
+3. **`ac mcp` unbucketed in settings.json** — now denied (the unmediated pipe must
+   not be an agent's shortcut around the proxy).
+4. **No top-level exception guard** — a dead daemon or a non-object frame crashed
+   the server; both are tool errors / skips now.
+5. **`ac_preflight` missing `phase`** — added; a schema-drift test now asserts every
+   tool covers its daemon method's parameters.
+6. **Acceptance suite wrote real session descriptors** — `AC_DATA_DIR` isolated.
+7. **stdin/stdout not UTF-8/LF** — `ac mcp` reconfigures both.
+8. **Proxy-config doc pointed at the wrong policy file** — shipped
+   `config/mcp-tool-policy.yaml` (ac_* names) + `config/al-mcp-proxy.yaml`; doc
+   corrected.
+
 ## Open risks
 
 - The session protocol is a convenience boundary, not a privilege boundary (any
