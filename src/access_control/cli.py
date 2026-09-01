@@ -1334,6 +1334,28 @@ def _run_rdp(
 
 
 @app.command()
+def mcp(
+    node: str = typer.Argument(..., help="Host id of the live session to serve"),
+) -> None:
+    """Serve the attached session as an MCP server on stdio.
+
+    Meant to run behind AgentLighthouse's proxy (`al mcp proxy -- uv run ac
+    mcp <host>`), which pins the tool surface, applies per-identity policy,
+    scans results, and signs a receipt per call. The tool surface is the
+    daemon protocol's agent-facing methods only — tunnels, credentials and
+    session lifecycle stay with the human operator.
+    """
+    from .mcp_server import McpServer, serve
+
+    client = attach(node)
+    if client is None:
+        _fail(f"no live session for '{node}'. Open one first:  uv run ac connect {node}")
+        return
+    # stdout carries the protocol; anything human-facing goes to stderr.
+    serve(McpServer(client), sys.stdin, sys.stdout)
+
+
+@app.command()
 def tunnel(
     node: str = typer.Argument(..., help="Host or hop id to forward to"),
     port: int = typer.Option(

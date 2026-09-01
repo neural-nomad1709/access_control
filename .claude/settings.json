@@ -1,11 +1,36 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls -la \"/c/Users/amit.kala/OneDrive - WiseTech Global Pty Ltd/AK/claude_work/access_control\" 2>&1 | head -50)",
-      "Read(//c/Users/amit.kala/OneDrive - WiseTech Global Pty Ltd/AK/claude_work/access_control/**)",
-      "Bash(diff -rq --exclude='.venv' --exclude='.pytest_cache' --exclude='.git' --exclude='__pycache__' \"/c/Users/amit.kala/OneDrive - WiseTech Global Pty Ltd/AK/claude_work/access_control\" \"/c/AILab/projects/access_control\" 2>&1)",
-      "Bash(mkdir -p \"/c/Users/amit.kala/OneDrive - WiseTech Global Pty Ltd/AK/claude_work/access_control/.claude\")",
-      "Bash(cp \"/c/AILab/projects/access_control/.claude/settings.json\" \"/c/Users/amit.kala/OneDrive - WiseTech Global Pty Ltd/AK/claude_work/access_control/.claude/settings.json\")"
+      "Bash(uv run ac doctor*)",
+      "Bash(uv run ac hosts*)",
+      "Bash(uv run ac routes*)",
+      "Bash(uv run ac ops*)",
+      "Bash(uv run ac status*)",
+      "Bash(uv run ac verify*)",
+      "Bash(uv run ac preview*)",
+      "Bash(uv run ac timeline*)",
+      "Bash(uv run ac audit*)",
+      "Bash(uv run ac brief validate*)",
+      "Bash(uv run ac brief show*)",
+      "Bash(uv run ac campaign validate*)"
+    ],
+    "ask": [
+      "Bash(uv run ac run*)",
+      "Bash(uv run ac exec*)",
+      "Bash(uv run ac brief run*)",
+      "Bash(uv run ac campaign run*)",
+      "Bash(uv run ac upload*)",
+      "Bash(uv run ac download*)",
+      "Bash(uv run ac reload*)"
+    ],
+    "deny": [
+      "Bash(uv run ac connect*)",
+      "Bash(ssh*)",
+      "Bash(plink*)",
+      "Bash(mstsc*)",
+      "Edit(config/operations.yaml)",
+      "Edit(config/inventory.yaml)",
+      "Edit(src/access_control/safety.py)"
     ]
   }
 }

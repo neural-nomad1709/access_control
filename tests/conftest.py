@@ -221,6 +221,10 @@ class FakeSession:
     def require_active(self) -> None:
         return None
 
+    def close(self, status: str = "closed", **_kwargs: Any) -> dict[str, Any]:
+        self.closed = True
+        return {"session_id": self.session_id, "status": status, "closed": True}
+
 
 @pytest.fixture
 def make_session(inventory: Inventory, catalog: Catalog) -> Callable[..., FakeSession]:

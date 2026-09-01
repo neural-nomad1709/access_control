@@ -139,6 +139,17 @@ means adding `do_<name>` to `SessionServer` — the dispatcher finds it.
 **`credentials_for` returns a username only. Passwords never cross this socket.**
 There is no method that returns a secret.
 
+### The MCP face
+
+`ac mcp <host>` (`src/access_control/mcp_server.py`) exposes the agent-facing
+subset of these methods as MCP tools, for running behind AgentLighthouse's
+proxy — see [../integration/mcp-proxy-config.md](../integration/mcp-proxy-config.md).
+It is a 1:1 wrapper: `ac_status`, `ac_preflight`, `ac_operations`, `ac_preview`,
+`ac_run_operation`, `ac_run_command`, `ac_fetch_log`. Tunnels,
+`credentials_for`, `close` and `reload` are **not** exposed — interactive
+handoff and session lifecycle stay with the human operator — and `confirmed` is
+stripped from every call, so an agent cannot self-approve through this surface.
+
 Every method that does work calls `session.touch()` first, so activity resets the
 idle timer.
 
