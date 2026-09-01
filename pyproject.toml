@@ -56,4 +56,12 @@ filterwarnings = ["ignore::DeprecationWarning"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    # Auditor-side tooling used only by the Phase 4 attestation test — it
+    # proves an ac-operation posture attestation verifies. Not a runtime
+    # dependency: ac never embeds the governance layer.
+    "al-governance",
 ]
+
+[tool.uv.sources.al-governance]
+path = "../AgentLighthouse/governance"
+editable = true

@@ -30,6 +30,7 @@ lighthouse = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "al-governance" },
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
@@ -50,6 +51,7 @@ provides-extras = ["dev", "lighthouse"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "al-governance", editable = "../AgentLighthouse/governance" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
 ]
@@ -87,6 +89,31 @@ requires-dist = [
     { name = "watchfiles", specifier = ">=0.22" },
 ]
 provides-extras = ["scanners", "postgres"]
+
+[[package]]
+name = "al-governance"
+version = "0.1.0"
+source = { editable = "../AgentLighthouse/governance" }
+dependencies = [
+    { name = "al-core" },
+    { name = "al-verify" },
+    { name = "cryptography" },
+    { name = "fastapi" },
+    { name = "typer" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "al-core", editable = "../AgentLighthouse/core" },
+    { name = "al-verify", editable = "../AgentLighthouse/verify" },
+    { name = "cryptography", specifier = ">=43" },
+    { name = "fastapi", specifier = ">=0.111" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2" },
+    { name = "typer", specifier = ">=0.12" },
+    { name = "uvicorn", specifier = ">=0.30" },
+]
+provides-extras = ["postgres"]
 
 [[package]]
 name = "al-verify"
