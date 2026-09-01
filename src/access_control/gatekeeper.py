@@ -146,6 +146,7 @@ class LighthouseGatekeeper:
         data_dir: str | Path,
         admin_api_token: str | None = None,
         org: str = "access-control",
+        tool_policy_path: str | Path | None = None,
     ) -> None:
         from al_core.embed import Runtime
 
@@ -155,30 +156,114 @@ class LighthouseGatekeeper:
             admin_api_token = secrets.token_hex(16)
         data_dir = Path(data_dir)
         self._org = org
-        self._runtime = Runtime(
-            config_path,
-            data_dir=str(data_dir),
-            admin_api_token=admin_api_token,
+        overrides: dict[str, Any] = {
             # AL's default signing-key path is CWD-relative; left alone, the
             # embedded runtime would drop a raw Ed25519 private key wherever
             # the process started (a git repo root, say). Key material lives
             # under data_dir, full stop.
-            keys={"signing_key_path": str(data_dir / "keys" / "mediator_ed25519")},
+            "keys": {"signing_key_path": str(data_dir / "keys" / "mediator_ed25519")},
+        }
+        if tool_policy_path is not None:
+            # AL's default here is CWD-relative too; a missing file means
+            # deny-all, so the operator names the policy explicitly.
+            overrides["policy"] = {"tool_policy_path": str(tool_policy_path)}
+        self._runtime = Runtime(
+            config_path,
+            data_dir=str(data_dir),
+            admin_api_token=admin_api_token,
+            **overrides,
         )
         self._ledger_path = data_dir / "ledger.jsonl"
+        # One held approval per (session, tool): the ticket the engine polls
+        # by re-running. Resolution consumes it — one approval, one run.
+        self._held: dict[tuple[str, str], str] = {}
 
-    # -- decisions (Phase 2 wires these to AL's gates) ----------------------
+    # -- decisions -----------------------------------------------------------
 
     def authorize(self, actor: str, tool: str, args: Mapping[str, Any],
                   session: str) -> GateDecision:
-        return GateDecision(allowed=True)
+        """Default-deny tool policy + argument constraints, receipted by AL."""
+        outcome = self._runtime.action_gate.authorize(
+            actor, tool, dict(args), session_id=session)
+        if outcome.allowed:
+            return GateDecision(allowed=True)
+        findings = ", ".join(
+            f.get("rule_id", "?") for f in (outcome.decision.findings or []))
+        return GateDecision(
+            allowed=False,
+            reason=f"{outcome.decision.block_reason or 'DENIED'}"
+                   + (f" ({findings})" if findings else ""),
+        )
 
     def request_approval(self, actor: str, tool: str, rendered_commands: str,
                          session: str) -> ApprovalTicket:
-        return ApprovalTicket(request_id="null", status="approved")
+        """File or poll the held approval for (session, tool).
+
+        First call submits a pending request (resolved out of band via the AL
+        control plane or the operator shell); subsequent calls poll it. A
+        resolution or lapse consumes the request — one approval authorizes one
+        run, and timeout remains a denial.
+        """
+        hitl = self._runtime.action_gate.hitl
+        key = (session, tool)
+        request_id = self._held.get(key)
+        if request_id is None:
+            request = hitl.submit(actor, tool)
+            self._held[key] = request.request_id
+            return ApprovalTicket(request_id=request.request_id, status="pending")
+        status = hitl.status(request_id)
+        if status == "pending":
+            return ApprovalTicket(request_id=request_id, status="pending")
+        del self._held[key]  # resolved or lapsed: consumed either way
+        if status == "approved":
+            return ApprovalTicket(request_id=request_id, status="approved")
+        return ApprovalTicket(request_id=request_id, status=status)
+
+    def pending_approvals(self) -> list[dict[str, Any]]:
+        """Pending requests, for the operator shell's :approve verb."""
+        hitl = self._runtime.action_gate.hitl
+        return [{
+            "request_id": r.request_id,
+            "actor": r.actor,
+            "tool": r.tool,
+            "remaining_s": hitl.remaining_s(r.request_id),
+        } for r in hitl.pending()]
+
+    def resolve_approval(self, request_id: str, decision: str, *, by: str) -> bool:
+        """Resolve one held request (allow | deny); receipted with the resolver."""
+        hitl = self._runtime.action_gate.hitl
+        resolved = (hitl.approve(request_id, by=by) if decision == "allow"
+                    else hitl.deny(request_id, by=by))
+        if resolved:
+            self._runtime.record(
+                actor=by, action="permission_request", target=f"hitl:{request_id}",
+                verdict="allow" if decision == "allow" else "block",
+                block_reason=None if decision == "allow" else "HITL_DENIED",
+            )
+        return resolved
 
     def scan_output(self, text: str, actor: str, session: str) -> ScanVerdict:
-        return ScanVerdict(text=text)
+        """Collected output through AL's content gate before the caller sees it.
+
+        Secrets/PII strip on top of ac's own redaction registry; an injection
+        finding taints the session (widening the approval net) and the hostile
+        text is withheld, never delivered.
+        """
+        result = self._runtime.action_gate.scan_result(
+            text, actor=actor, tool="collect", session_id=session)
+        tainted = self._runtime.action_gate.taint.is_tainted(session)
+        if result.blocked:
+            reason = result.block_reason or "CONTENT_BLOCKED"
+            return ScanVerdict(
+                text=f"[content withheld by the governance plane: {reason}]",
+                findings=tuple(f.get("rule_id", "?") for f in result.findings),
+                tainted=tainted,
+            )
+        return ScanVerdict(
+            text=result.text,
+            findings=tuple(f.get("rule_id", "?") for f in result.findings),
+            tainted=tainted,
+        )
 
     # -- evidence -----------------------------------------------------------
 
