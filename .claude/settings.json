@@ -25,9 +25,17 @@
     ],
     "deny": [
       "Bash(uv run ac connect*)",
+      "Bash(uv run ac shell*)",
+      "Bash(uv run ac rdp*)",
+      "Bash(uv run ac tunnel*)",
+      "Bash(uv run ac mcp*)",
       "Bash(ssh*)",
       "Bash(plink*)",
       "Bash(mstsc*)",
+      "Bash(pwsh*)",
+      "Bash(powershell*)",
+      "Bash(python*)",
+      "Bash(python3*)",
       "Edit(config/operations.yaml)",
       "Edit(config/inventory.yaml)",
       "Edit(src/access_control/safety.py)"

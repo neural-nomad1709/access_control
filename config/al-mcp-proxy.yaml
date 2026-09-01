@@ -1,0 +1,13 @@
+# AgentLighthouse config for mediating the ac MCP surface.
+#
+# Pass this to `al mcp proxy --config`. It points the L4 tool policy at
+# config/mcp-tool-policy.yaml (whose tool names are the ac_* MCP tools), so
+# the proxy enforces per-identity default-deny on what an agent may call.
+#
+# The admin API token comes from the environment (AL_ADMIN_API_TOKEN), never
+# this file. Paths are relative to where `al mcp proxy` runs; use absolute
+# paths, or run from the access_control repo root.
+mode: balanced
+env: dev
+policy:
+  tool_policy_path: config/mcp-tool-policy.yaml

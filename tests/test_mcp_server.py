@@ -177,3 +177,48 @@ class TestServeLoop:
         serve(srv, stdin, stdout)
         replies = [json.loads(line) for line in stdout.getvalue().splitlines()]
         assert len(replies) == 1 and "result" in replies[0]
+
+    def test_a_valid_but_non_object_frame_does_not_crash(self, server) -> None:
+        srv, _ = server
+        stdin = io.StringIO(
+            "null\n[1,2,3]\n42\n" + json.dumps(rpc("tools/list", id=9)) + "\n")
+        stdout = io.StringIO()
+        serve(srv, stdin, stdout)  # must not raise
+        replies = [json.loads(line) for line in stdout.getvalue().splitlines()]
+        assert [r.get("id") for r in replies] == [9]
+
+    def test_a_non_mapping_arguments_field_is_a_tool_error_not_a_crash(self, server) -> None:
+        srv, _ = server
+        reply = srv.handle(rpc("tools/call", {"name": "ac_status", "arguments": "{}"}))
+        assert reply["result"]["isError"] is True
+
+    def test_a_dead_daemon_surfaces_as_a_tool_error(self) -> None:
+        class DeadClient:
+            def call(self, method, **params):
+                raise ValueError("session response was truncated")
+
+        reply = McpServer(DeadClient()).handle(rpc("tools/call", {
+            "name": "ac_status", "arguments": {}}))
+        assert reply["result"]["isError"] is True
+        assert "truncated" in reply["result"]["content"][0]["text"]
+
+
+class TestSchemaMatchesDaemon:
+    def test_exposed_tool_schemas_cover_the_daemon_method_signature(self) -> None:
+        """The hand-written schemas must not omit a daemon parameter, or a
+        legitimate call is refused by the MCP surface while the daemon would
+        accept it."""
+        import inspect
+
+        from access_control import daemon
+
+        for name, spec in EXPOSED_TOOLS.items():
+            handler = getattr(daemon.SessionServer, f"do_{spec.method}")
+            sig = inspect.signature(handler)
+            daemon_params = {
+                p for p, v in sig.parameters.items()
+                if p != "self" and v.kind in (v.POSITIONAL_OR_KEYWORD, v.KEYWORD_ONLY)
+            }
+            schema_params = set(spec.properties) | {"confirmed"}
+            missing = daemon_params - schema_params
+            assert not missing, f"{name} omits daemon param(s) {missing}"

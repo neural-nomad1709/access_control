@@ -225,6 +225,14 @@ class FakeSession:
         self.closed = True
         return {"session_id": self.session_id, "status": status, "closed": True}
 
+    def status(self) -> dict[str, Any]:
+        return {"session_id": self.session_id, "host_id": self.host_id,
+                "connected": True, "route": self.route.describe()}
+
+    def operations(self) -> list[dict[str, Any]]:
+        return [{"id": op.id, "description": op.description}
+                for op in self.catalog.for_host(self.host)]
+
 
 @pytest.fixture
 def make_session(inventory: Inventory, catalog: Catalog) -> Callable[..., FakeSession]:

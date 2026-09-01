@@ -1347,10 +1347,13 @@ def mcp(
     """
     from .mcp_server import McpServer, serve
 
-    client = attach(node)
-    if client is None:
-        _fail(f"no live session for '{node}'. Open one first:  uv run ac connect {node}")
-        return
+    client = _client_or_fail(node)
+    # MCP framing is UTF-8, newline-delimited: force both, or a Windows console's
+    # cp1252 mangles non-ASCII arguments and CRLF translation corrupts the frames.
+    for stream in (sys.stdin, sys.stdout):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", newline="\n")
     # stdout carries the protocol; anything human-facing goes to stderr.
     serve(McpServer(client), sys.stdin, sys.stdout)
 

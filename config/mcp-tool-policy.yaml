@@ -1,0 +1,45 @@
+# Identity-bound policy for the MCP tool surface (AgentLighthouse L4).
+#
+# This is the policy `al mcp proxy` enforces on the tools `ac mcp` advertises.
+# It is SEPARATE from config/tool-policy.yaml: that one names catalogue steps
+# (`<operation-id>.<step-id>`, `ac_exec`) and is loaded by the embedded
+# LighthouseGatekeeper inside ac; THIS one names the MCP tools (`ac_status`,
+# `ac_run_operation`, …) the proxy sees.
+#
+# Reference it from an AL config's `policy.tool_policy_path` (see
+# config/al-mcp-proxy.yaml), then launch:
+#   al mcp proxy --actor <spiffe> --config config/al-mcp-proxy.yaml -- uv run ac mcp <host>
+#
+# DEFAULT-DENY: an identity runs a tool only with an explicit allow rule whose
+# argument constraints pass. Copy the block per real identity; keep `default`
+# empty.
+
+agents:
+  # EXAMPLE — replace with the agent's pinned SPIFFE identity (lowercased,
+  # sanitized to [a-z0-9._-]; must match `ac connect --agent-id` and the
+  # proxy's --actor).
+  "spiffe://access-control/agent/claude-code-example":
+    allow:
+      # Read-only introspection.
+      - tool: ac_status
+      - tool: ac_preflight
+      - tool: ac_operations
+      - tool: ac_preview
+      # Read-only catalogued operations only — scope by operation id.
+      - tool: ac_run_operation
+        args:
+          operation_id:
+            allow_values: [windows-health, linux-health, linux-service-status,
+                           collect-diagnostics]
+      - tool: ac_fetch_log
+        args:
+          path:
+            max_len: 512
+    deny:
+      # The ad-hoc escape hatch is not reachable through the mediated path;
+      # diagnosis that needs it goes through a human-approved run.
+      - { tool: ac_run_command }
+
+  # Unknown identities: deny every tool (fail-closed floor).
+  default:
+    allow: []

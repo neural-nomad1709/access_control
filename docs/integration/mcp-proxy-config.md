@@ -42,20 +42,30 @@ agent ──stdio JSON-RPC──▶ al mcp proxy ──stdio──▶ uv run ac 
    catalogue. The session marks itself agent-attached, so gated work resolves
    out of band (P2), never via a flag.
 
-2. A tool policy for that identity (see `config/tool-policy.yaml`). The MCP
-   tool names are `ac_<method>` — e.g. `ac_run_operation` with an
-   `operation_id` `allow_values` constraint scoping which operations the agent
-   may run through the proxy.
+2. A tool policy for that identity, named for the **MCP tools** the proxy sees
+   (`ac_status`, `ac_run_operation`, …), in `config/mcp-tool-policy.yaml`. This
+   is a different file from `config/tool-policy.yaml`, whose names are catalogue
+   steps (`<operation>.<step>`, `ac_exec`) for the embedded gatekeeper inside
+   ac. The proxy reads its policy through its AL `--config`'s
+   `policy.tool_policy_path`, so `config/al-mcp-proxy.yaml` wires the two
+   together.
 
 ## Launch
 
 ```
+export AL_ADMIN_API_TOKEN=…    # the proxy's Runtime needs it; never in a file
 al mcp proxy \
     --actor spiffe://access-control/agent/claude-j-doe-inc0001234 \
     --session prod-app01 \
-    --config configs/balanced.yaml \
+    --config config/al-mcp-proxy.yaml \
     -- uv run ac mcp prod-app01
 ```
+
+`config/al-mcp-proxy.yaml` sets `policy.tool_policy_path:
+config/mcp-tool-policy.yaml` — edit **that** file to scope which `ac_*` tools
+(and which `operation_id` values) the identity may reach. Pointing `--config`
+at a plain AL config with no `policy` section falls back to AL's own default
+deny-all, and every agent call is blocked.
 
 The agent connects to `al mcp proxy` on stdio. Every hop — the tools/list pin,
 each tools/call decision, each result scan — is a receipt in AL's ledger,

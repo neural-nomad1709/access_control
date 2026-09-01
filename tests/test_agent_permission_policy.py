@@ -25,6 +25,19 @@ def test_raw_transports_and_connect_are_denied() -> None:
         assert pattern in deny, f"§8.2 requires denying {pattern}"
 
 
+def test_general_shells_and_interactive_ac_commands_are_denied() -> None:
+    """R-11 is only closed if the mediated MCP path is the ONLY door: an agent
+    must not open an interactive session, a raw shell, or the unmediated MCP
+    pipe and walk around every gate."""
+    deny = _policy()["deny"]
+    for pattern in (
+        "Bash(uv run ac shell*)", "Bash(uv run ac rdp*)", "Bash(uv run ac tunnel*)",
+        "Bash(uv run ac mcp*)",       # the UNMEDIATED pipe (bypasses the proxy)
+        "Bash(pwsh*)", "Bash(powershell*)", "Bash(python*)",
+    ):
+        assert pattern in deny, f"a general-shell bypass is open: {pattern}"
+
+
 def test_the_policy_surface_itself_is_deny_edited() -> None:
     deny = _policy()["deny"]
     for guarded in ("Edit(config/operations.yaml)", "Edit(config/inventory.yaml)",

@@ -70,6 +70,13 @@ class MediatedAgent:
         return self._filter.filter_response(raw)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_session_dir(tmp_path: Path, monkeypatch):
+    """RunningServer writes real session descriptors; keep them out of the
+    developer's live %LOCALAPPDATA%\\access_control\\sessions."""
+    monkeypatch.setenv("AC_DATA_DIR", str(tmp_path / "ac-data"))
+
+
 @pytest.fixture
 def mediated(tmp_path: Path, make_session):
     policy = tmp_path / "proxy-policy.yaml"
@@ -104,6 +111,23 @@ def tool_names(reply: dict[str, Any]) -> set[str]:
     return {t["name"] for t in reply["result"]["tools"]}
 
 
+def test_the_shipped_mcp_policy_parses_and_scopes_correctly() -> None:
+    from al_core.capability.policy import ToolCall, ToolPolicy
+
+    policy = ToolPolicy.from_yaml(
+        Path(__file__).parents[1] / "config" / "mcp-tool-policy.yaml")
+    example = "spiffe://access-control/agent/claude-code-example"
+    assert policy.check(ToolCall(actor=example, tool="ac_status", args={})).allowed
+    assert not policy.check(ToolCall(actor=example, tool="ac_run_command",
+                                     args={"command": "x"})).allowed
+    assert not policy.check(ToolCall(actor=example, tool="ac_run_operation",
+                                     args={"operation_id": "run-command"})).allowed
+    assert policy.check(ToolCall(actor=example, tool="ac_run_operation",
+                                 args={"operation_id": "windows-health"})).allowed
+    assert not policy.check(ToolCall(actor="spiffe://access-control/agent/stranger",
+                                     tool="ac_status", args={})).allowed
+
+
 class TestMediatedAgentPath:
     def test_a_read_only_operation_end_to_end_with_every_hop_receipted(
         self, mediated
@@ -130,6 +154,15 @@ class TestMediatedAgentPath:
         calls = [r for r in records if r["action"] == "mcp_tool_call"]
         assert any(r["target"] == "tool:ac_run_operation" and r["verdict"] == "allow"
                    for r in calls)
+
+    def test_read_only_introspection_tools_pass_through_mediated(self, mediated) -> None:
+        agent, _, _ = mediated
+        agent.send(rpc("initialize", {}, id=1))
+        status = agent.send(rpc("tools/call", {"name": "ac_status", "arguments": {}}, id=2))
+        assert not status["result"].get("isError")
+        assert json.loads(status["result"]["content"][0]["text"])["host_id"] == "win01"
+        ops = agent.send(rpc("tools/call", {"name": "ac_operations", "arguments": {}}, id=3))
+        assert not ops["result"].get("isError")
 
     def test_a_call_outside_policy_never_reaches_the_server(self, mediated) -> None:
         agent, runtime, ledger_path = mediated
@@ -172,9 +205,9 @@ class TestMediatedAgentPath:
         agent, _, _ = mediated
         agent.send(rpc("tools/list", id=7))  # pin the honest surface
 
-        drifted = {**dict(mcp_server_module.EXPOSED_TOOLS)}
-        method, _desc, props, req = drifted["ac_run_operation"]
-        drifted["ac_run_operation"] = (method, "now with extra powers", props, req)
+        drifted = dict(mcp_server_module.EXPOSED_TOOLS)
+        drifted["ac_run_operation"] = drifted["ac_run_operation"]._replace(
+            description="now with extra powers")
         monkeypatch.setattr(mcp_server_module, "EXPOSED_TOOLS", drifted)
 
         listed = agent.send(rpc("tools/list", id=8))

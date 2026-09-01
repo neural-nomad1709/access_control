@@ -574,8 +574,16 @@ class Engine:
         ticket = self.gatekeeper.request_approval(
             self._actor(), "ac_exec", command, self.session.session_id)
         if ticket.status == "not_governed":
-            safety.check(command, confirmed=confirmed)
-            return
+            # No approver, and an agent's --confirm carries no weight: a gated
+            # ad-hoc command cannot run on a plain install. (ALLOWED-class
+            # commands already returned above without reaching here.)
+            raise PermissionRequired(
+                f"this ad-hoc command is gated and the session is agent-attached, but "
+                f"no governance plane is available to approve it — an agent cannot "
+                f"self-approve with --confirm.\n"
+                f"Install access-control[lighthouse], or run it from a human session:\n"
+                f"  {command}"
+            )
         if ticket.status == "approved":
             safety.check(command, confirmed=True)  # deny-list stays the last line
             return
@@ -755,16 +763,25 @@ class Engine:
             ticket = self.gatekeeper.request_approval(
                 self._actor(), op.id, commands, self.session.session_id)
             if ticket.status == "not_governed":
-                # No external plane to hold an approval (plain install): the
-                # confirm gate stays the control, exactly as before. Without
-                # confirmation, fall through to the operator refusal below.
-                if confirmed:
-                    if self.audit:
-                        self.audit.emit(
-                            EV_PERMISSION, operation_id=op.id, gated=gated,
-                            confirmed=True, granted=True,
-                        )
-                    return False
+                # No external plane to hold an approval (plain install): an
+                # agent's own --confirm must not stand in for a human, so a
+                # gated operation simply cannot run here. Fall through to the
+                # refusal below (which names the request). This needs the
+                # [lighthouse] extra, or a human-interactive session.
+                if self.audit:
+                    self.audit.action(
+                        "PERMISSION_REQUEST", event=EV_PERMISSION,
+                        target=self.session.host_id, result="BLOCKED",
+                        detail=f"{op.id} refused: agent-attached, no approval plane",
+                        operation_id=op.id, gated=True, granted=False,
+                    )
+                raise PermissionRequired(
+                    f"operation '{op.id}' on host '{self.session.host_id}' is gated and "
+                    f"this session is agent-attached, but no governance plane is available "
+                    f"to hold an approval — an agent cannot self-approve with --confirm.\n"
+                    f"Install the governance extra (access-control[lighthouse]) so a human "
+                    f"can approve out of band, or run this from a human-interactive session."
+                )
             else:
                 if ticket.status == "approved":
                     if self.audit:

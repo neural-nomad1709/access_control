@@ -167,17 +167,32 @@ class TestP2UngovernedFallback:
     """A plain install (NullGatekeeper) must behave exactly as before Phase 2:
     the confirm gate is the control, for agents too — never an auto-approval."""
 
-    def test_an_ungoverned_agent_still_faces_the_confirm_gate(self, make_session) -> None:
+    def test_an_ungoverned_agent_cannot_run_a_gated_op_even_with_confirm(
+        self, make_session
+    ) -> None:
+        """No governance plane means no out-of-band approver — and an agent's
+        own --confirm never counts (brief P2 acceptance b). A plain install
+        cannot run gated ops as an agent; that needs the [lighthouse] extra
+        or a human session."""
+        for confirmed in (False, True):
+            session = make_session("win01")
+            session.agent_attached = True
+            engine = Engine(session)  # default NullGatekeeper
+            with pytest.raises(PermissionRequired):
+                engine.run_operation("needs-approval", confirmed=confirmed)
+            assert session.commands == []
+
+    def test_an_ungoverned_agents_gated_exec_is_refused_with_confirm(
+        self, make_session
+    ) -> None:
         session = make_session("win01")
         session.agent_attached = True
-        engine = Engine(session)  # default NullGatekeeper
         with pytest.raises(PermissionRequired):
-            engine.run_operation("needs-approval")
+            Engine(session).run_command("Restart-Service W3SVC", confirmed=True)
         assert session.commands == []
 
-    def test_an_ungoverned_agent_with_confirm_runs_as_today(self, make_session) -> None:
-        session = make_session("win01")
-        session.agent_attached = True
+    def test_an_ungoverned_human_keeps_the_confirm_regime(self, make_session) -> None:
+        session = make_session("win01")  # not agent-attached
         outcome = Engine(session).run_operation("needs-approval", confirmed=True)
         assert outcome.ok
 
