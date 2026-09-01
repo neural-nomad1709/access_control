@@ -271,7 +271,19 @@ class TestEndToEndOverFakeSSH:
         key_path = tmp_path / "id_test"
         key.write_private_key_file(str(key_path))
 
-        gk = LighthouseGatekeeper(data_dir=tmp_path / "al-data")
+        # D4: default-deny applies to every session, so even this e2e needs an
+        # explicit policy allow for its identity — that IS the enforcement.
+        policy = tmp_path / "tool-policy.yaml"
+        policy.write_text(
+            'agents:\n'
+            '  "spiffe://access-control/agent/pytest-e2e":\n'
+            '    allow:\n'
+            '      - tool: ac_exec\n'
+            '  default: { allow: [] }\n',
+            encoding="utf-8",
+        )
+        gk = LighthouseGatekeeper(data_dir=tmp_path / "al-data",
+                                  tool_policy_path=policy)
         bastion = FakeSSHServer(
             "bastion",
             policy=AuthPolicy(username="opuser", password=BASTION_PASSWORD,

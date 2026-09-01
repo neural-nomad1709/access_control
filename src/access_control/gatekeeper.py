@@ -19,10 +19,23 @@ a gatekeeper and hands it down.
 
 from __future__ import annotations
 
+import re
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Protocol, runtime_checkable
+
+_SPIFFE_UNSAFE = re.compile(r"[^a-z0-9._-]")
+
+
+def spiffe_actor(agent_id: str, org: str = "access-control") -> str:
+    """The SPIFFE identity a governance plane keys policy and receipts on.
+
+    Lowercased and sanitized to AL's path grammar ([a-z0-9._-]): ac agent ids
+    like ``AGT-20260812-3f9a1c`` or ``user@host-3fa`` must map to identities
+    the governance plane's registry could actually issue.
+    """
+    return f"spiffe://{org}/agent/{_SPIFFE_UNSAFE.sub('-', str(agent_id).lower())}"
 
 
 @dataclass(frozen=True)
@@ -276,11 +289,8 @@ class LighthouseGatekeeper:
         action = str(fields.get("action", ""))
         verdict = _RECEIPT_VERDICTS.get(str(fields.get("result", "SUCCESS")), "block")
         target = fields.get("target") or fields.get("host_id") or ""
-        # Lowercased: AL's SPIFFE grammar accepts [a-z0-9._-] path segments
-        # only, and receipts must carry actors its identity registry can issue.
-        agent_id = str(fields.get("agentId", "unknown")).lower()
         self._runtime.record(
-            actor=f"spiffe://{self._org}/agent/{agent_id}",
+            actor=spiffe_actor(fields.get("agentId", "unknown"), self._org),
             action=_RECEIPT_ACTIONS.get(action, _DEFAULT_RECEIPT_ACTION),
             target=f"{action}:{target}",
             verdict=verdict,
@@ -309,4 +319,5 @@ __all__ = [
     "LighthouseGatekeeper",
     "NullGatekeeper",
     "ScanVerdict",
+    "spiffe_actor",
 ]
