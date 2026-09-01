@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .audit import AuditLog, default_agent_id, new_session_id
+from .gatekeeper import Gatekeeper
 from .config import Catalog, Host, Inventory, Node
 from .credentials import CredentialStore
 from .errors import ChannelUnavailable, ConnectionFailed, SessionError
@@ -53,6 +54,10 @@ class Session:
     session_id: str = field(default_factory=new_session_id)
     creds: CredentialStore = field(default_factory=CredentialStore)
     audit: AuditLog | None = None
+    #: The session owns the governance gatekeeper, so every Engine built on it
+    #: (daemon, CLI) inherits the same one — the receipt sink and enforcement
+    #: cannot diverge by construction. None means ungoverned (NullGatekeeper).
+    gatekeeper: "Gatekeeper | None" = None
     #: Operations the operator authorised for this session.  Empty means "any
     #: operation the catalog permits for this host".
     allowed_operations: tuple[str, ...] = ()

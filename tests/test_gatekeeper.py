@@ -127,18 +127,50 @@ class TestAuditReceiptSink:
 
 
 class TestBuildSessionWiring:
-    def test_build_session_attaches_the_gatekeepers_receipt_sink(
-        self, config_files: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def _session(self, config_files: Path, monkeypatch: pytest.MonkeyPatch,
+                 gk: RecordingGatekeeper):
         from access_control.config import load_inventory, load_operations
         from access_control.daemon import build_session
 
         monkeypatch.setenv("AC_DATA_DIR", str(config_files.parent / "data"))
         inventory = load_inventory(config_files / "inventory.yaml")
         catalog = load_operations(config_files / "operations.yaml")
+        return build_session("lin01", inventory=inventory, catalog=catalog,
+                             gatekeeper=gk)
+
+    def test_build_session_attaches_the_gatekeepers_receipt_sink(
+        self, config_files: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         gk = RecordingGatekeeper()
-        session = build_session(
-            "lin01", inventory=inventory, catalog=catalog, gatekeeper=gk,
-        )
+        session = self._session(config_files, monkeypatch, gk)
         session.audit.action("ROUTE_RESOLVE", target="lin01")
         assert [r["action"] for r in gk.receipts] == ["ROUTE_RESOLVE"]
+
+    def test_the_session_owns_the_gatekeeper_and_the_engine_inherits_it(
+        self, config_files: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One gatekeeper, one owner: the seam must not split into a receipted-
+        but-unenforced daemon path when Phase 2 wires decisions into Engine."""
+        gk = RecordingGatekeeper()
+        session = self._session(config_files, monkeypatch, gk)
+        assert session.gatekeeper is gk
+        engine = Engine(session)  # how SessionServer and the CLI construct it
+        assert engine.gatekeeper is gk
+
+
+class TestSinkOrdering:
+    def test_the_sink_fires_inside_the_audit_lock(self, tmp_path: Path) -> None:
+        """Concurrent daemon threads share one AuditLog; the sink must run
+        under the same lock that assigned the record's seq, or the mirrored
+        ledger can chain records in a different order than the JSONL."""
+        log = AuditLog(session_id="SES-test", agent_id="AGT-test",
+                       directory=tmp_path / "logs")
+
+        held: list[bool] = []
+
+        def sink(**fields: Any) -> None:
+            held.append(log._lock._is_owned())  # CPython RLock introspection
+
+        log.sink = sink
+        log.action("SESSION_START")
+        assert held == [True]

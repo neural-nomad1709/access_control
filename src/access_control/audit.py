@@ -21,7 +21,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .paths import ensure_dir, log_dir
 from .redact import redact_obj
@@ -115,7 +115,9 @@ class AuditLog:
     #: Optional receipt sink: called with every canonical action record
     #: (post-redaction) so an external ledger can mirror the trail. A sink
     #: failure propagates — evidence is synchronous or it is not evidence.
-    sink: Any = None
+    #: Deliberately independent of ``enabled``: turning local logging off must
+    #: not switch off governance evidence.
+    sink: Callable[..., None] | None = None
 
     def __post_init__(self) -> None:
         self.directory = ensure_dir(Path(self.directory) if self.directory else log_dir())
@@ -123,7 +125,10 @@ class AuditLog:
         self.path = self.directory / f"{stem}.jsonl"
         self.records: list[dict[str, Any]] = []
         self._seq = 0
-        self._lock = threading.Lock()
+        # Re-entrant: action() holds it across emit() AND the sink call, so a
+        # mirrored ledger chains records in the same order the JSONL assigned
+        # their seq numbers (daemon request threads share this log).
+        self._lock = threading.RLock()
         self._started = time.time()
 
     # -- writing ----------------------------------------------------------
@@ -177,16 +182,17 @@ class AuditLog:
         (``step.end``) can carry a canonical action without emitting the record
         twice.
         """
-        record = self.emit(
-            event or action.lower().replace("_", "."),
-            action=action,
-            source=source or "local",
-            target=target,
-            result=result,
-            **fields,
-        )
-        if self.sink is not None:
-            self.sink(**record)
+        with self._lock:
+            record = self.emit(
+                event or action.lower().replace("_", "."),
+                action=action,
+                source=source or "local",
+                target=target,
+                result=result,
+                **fields,
+            )
+            if self.sink is not None:
+                self.sink(**record)
         return record
 
     def _append(self, record: dict[str, Any]) -> None:

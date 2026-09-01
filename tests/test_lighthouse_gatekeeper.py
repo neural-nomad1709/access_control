@@ -43,6 +43,27 @@ def mirrored(gk: LighthouseGatekeeper) -> list[dict]:
     return [r for r in ledger_records(gk) if not r["action"] == "config_change"]
 
 
+class TestKeyMaterialPlacement:
+    def test_the_signing_key_lives_under_data_dir_never_the_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """AL's default signing-key path is CWD-relative; left alone, an
+        embedded runtime would drop a raw Ed25519 private key wherever the
+        process happened to start — including a git repo root."""
+        cwd = tmp_path / "somewhere"
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+        data_dir = tmp_path / "al-data"
+        gk = LighthouseGatekeeper(data_dir=data_dir)
+        try:
+            assert not (cwd / "keys").exists(), (
+                "the mediator private key was generated at the CWD"
+            )
+            assert (data_dir / "keys" / "mediator_ed25519").exists()
+        finally:
+            gk.close()
+
+
 class TestReceiptMapping:
     def _emit(self, gk: LighthouseGatekeeper, action: str, result: str,
               target: str = "win01") -> None:
@@ -78,10 +99,35 @@ class TestReceiptMapping:
     def test_identity_and_provenance_survive_the_mapping(self, gatekeeper) -> None:
         self._emit(gatekeeper, "COMMAND_EXECUTE", "SUCCESS", target="lin01")
         record = mirrored(gatekeeper)[0]
-        assert record["actor"] == "spiffe://access-control/agent/AGT-test-3f9a1c"
+        # lowercased: AL's SPIFFE grammar accepts [a-z0-9._-] path segments
+        # only, and receipts must carry actors its identity registry can issue
+        assert record["actor"] == "spiffe://access-control/agent/agt-test-3f9a1c"
         assert record["session"] == "SES-3f9a1c"
         # the original canonical action rides in the target, so nothing is lost
         assert record["target"] == "COMMAND_EXECUTE:lin01"
+
+    def test_the_actor_satisfies_als_own_spiffe_grammar(self, gatekeeper) -> None:
+        from al_core.identity import spiffe_id
+
+        self._emit(gatekeeper, "COMMAND_EXECUTE", "SUCCESS")
+        actor = mirrored(gatekeeper)[0]["actor"]
+        # raises InvalidSpiffeId if AL's identity machinery cannot parse it
+        assert spiffe_id("access-control", "agt-test-3f9a1c") == actor
+
+    def test_every_canonical_action_and_result_has_a_deliberate_mapping(self) -> None:
+        """audit.py's vocabulary and the receipt mapping must not drift apart:
+        a new canonical action or result gets a conscious mapping entry, never
+        the silent fallthrough (which would sign a receipt claiming something
+        that did not happen)."""
+        from access_control import audit
+        from access_control.gatekeeper import _RECEIPT_ACTIONS, _RECEIPT_VERDICTS
+
+        unmapped = [a for a in audit.ACTIONS if a not in _RECEIPT_ACTIONS]
+        assert not unmapped, f"canonical actions without a mapping: {unmapped}"
+        results = {audit.RESULT_SUCCESS, audit.RESULT_FAILURE,
+                   audit.RESULT_BLOCKED, audit.RESULT_PENDING}
+        unmapped_results = [r for r in results if r not in _RECEIPT_VERDICTS]
+        assert not unmapped_results, f"results without a mapping: {unmapped_results}"
 
 
 class TestLedgerIntegrity:

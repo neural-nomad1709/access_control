@@ -256,7 +256,11 @@ class Engine:
     def __init__(self, session: Session, gatekeeper: "Gatekeeper | None" = None) -> None:
         self.session = session
         self.audit = session.audit
-        self.gatekeeper: Gatekeeper = gatekeeper or NullGatekeeper()
+        # The session owns the gatekeeper (build_session sets it); an explicit
+        # argument overrides, and with neither this engine is ungoverned.
+        self.gatekeeper: Gatekeeper = (
+            gatekeeper or getattr(session, "gatekeeper", None) or NullGatekeeper()
+        )
         self._report_seq = 0
 
     # -- planning ---------------------------------------------------------

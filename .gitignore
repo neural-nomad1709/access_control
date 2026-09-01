@@ -66,3 +66,7 @@ htmlcov/
 *.swp
 Thumbs.db
 desktop.ini
+
+# Ed25519 signing-key material (an embedded governance runtime must never
+# leave key material where git can see it; belt for the data_dir override)
+/keys/

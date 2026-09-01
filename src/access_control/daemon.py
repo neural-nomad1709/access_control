@@ -646,6 +646,7 @@ def build_session(
         session_id=identity.session_id,
         creds=CredentialStore(prompter=select_prompter(prompter_name)),
         audit=audit,
+        gatekeeper=gatekeeper,
         allowed_operations=allowed_operations,
         fallback_to_hop=fallback_to_hop,
     )

@@ -19,7 +19,9 @@ a gatekeeper and hands it down.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import secrets
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping, Protocol, runtime_checkable
 
 
@@ -85,7 +87,11 @@ class NullGatekeeper:
 # Session-establishment events (route, hops, auth, tunnels, interactive
 # launches) are all session_open; execution, transfer and collection are
 # remote_exec; the original action always rides in the receipt target
-# ("SSH_CONNECT:bastion1"), so nothing is flattened away.
+# ("SSH_CONNECT:bastion1"), so nothing is flattened away. EVERY member of
+# audit.ACTIONS has a deliberate entry — a cross-module test pins the two
+# vocabularies together, so a new canonical action cannot silently fall
+# through to the remote_exec default and sign a receipt claiming a remote
+# command ran when none did.
 _RECEIPT_ACTIONS = {
     "SESSION_START": "session_open",
     "ROUTE_RESOLVE": "session_open",
@@ -96,6 +102,16 @@ _RECEIPT_ACTIONS = {
     "RDP_LAUNCH": "session_open",
     "SESSION_END": "session_close",
     "PERMISSION_REQUEST": "permission_request",
+    "COMMAND_EXECUTE": "remote_exec",
+    "SCRIPT_EXECUTE": "remote_exec",
+    "FILE_UPLOAD": "remote_exec",
+    "FILE_DOWNLOAD": "remote_exec",
+    "LOG_COLLECT": "remote_exec",
+    "COMMAND_BLOCKED": "remote_exec",
+    "ERROR": "remote_exec",
+    # Emitted by the daemon but absent from audit.ACTIONS (F-12):
+    "PREFLIGHT": "remote_exec",
+    "COMMAND": "remote_exec",
 }
 _DEFAULT_RECEIPT_ACTION = "remote_exec"
 
@@ -125,9 +141,9 @@ class LighthouseGatekeeper:
 
     def __init__(
         self,
-        config_path: Any = None,
+        config_path: str | Path | None = None,
         *,
-        data_dir: Any,
+        data_dir: str | Path,
         admin_api_token: str | None = None,
         org: str = "access-control",
     ) -> None:
@@ -136,16 +152,20 @@ class LighthouseGatekeeper:
         if admin_api_token is None:
             # Only AL's HTTP control plane uses this token; an embedded runtime
             # never serves HTTP, so an unguessable throwaway satisfies it.
-            import secrets
-
             admin_api_token = secrets.token_hex(16)
+        data_dir = Path(data_dir)
         self._org = org
         self._runtime = Runtime(
-            config_path, data_dir=str(data_dir), admin_api_token=admin_api_token
+            config_path,
+            data_dir=str(data_dir),
+            admin_api_token=admin_api_token,
+            # AL's default signing-key path is CWD-relative; left alone, the
+            # embedded runtime would drop a raw Ed25519 private key wherever
+            # the process started (a git repo root, say). Key material lives
+            # under data_dir, full stop.
+            keys={"signing_key_path": str(data_dir / "keys" / "mediator_ed25519")},
         )
-        from pathlib import Path
-
-        self._ledger_path = Path(str(data_dir)) / "ledger.jsonl"
+        self._ledger_path = data_dir / "ledger.jsonl"
 
     # -- decisions (Phase 2 wires these to AL's gates) ----------------------
 
@@ -171,8 +191,11 @@ class LighthouseGatekeeper:
         action = str(fields.get("action", ""))
         verdict = _RECEIPT_VERDICTS.get(str(fields.get("result", "SUCCESS")), "block")
         target = fields.get("target") or fields.get("host_id") or ""
+        # Lowercased: AL's SPIFFE grammar accepts [a-z0-9._-] path segments
+        # only, and receipts must carry actors its identity registry can issue.
+        agent_id = str(fields.get("agentId", "unknown")).lower()
         self._runtime.record(
-            actor=f"spiffe://{self._org}/agent/{fields.get('agentId', 'unknown')}",
+            actor=f"spiffe://{self._org}/agent/{agent_id}",
             action=_RECEIPT_ACTIONS.get(action, _DEFAULT_RECEIPT_ACTION),
             target=f"{action}:{target}",
             verdict=verdict,
