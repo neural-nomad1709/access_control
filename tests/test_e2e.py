@@ -849,7 +849,15 @@ class TestOperatorPrompt:
         from rich.console import Console
 
         out, errs = io.StringIO(), io.StringIO()
-        return Console(file=out, width=100, no_color=True), Console(file=errs, width=100, no_color=True), out, errs
+        # force_terminal=False as well as no_color: Rich honours FORCE_COLOR from
+        # the environment, and no_color drops colour while still emitting bold,
+        # which breaks the plain-substring assertions below.
+        return (
+            Console(file=out, width=100, no_color=True, force_terminal=False),
+            Console(file=errs, width=100, no_color=True, force_terminal=False),
+            out,
+            errs,
+        )
 
     @staticmethod
     def _shell_target():

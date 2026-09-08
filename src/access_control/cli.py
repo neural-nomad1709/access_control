@@ -1663,11 +1663,30 @@ def _print_operation(result: dict[str, Any]) -> None:
         console.print(f"\n[dim]end-to-end summary: {result['summary_file']}[/dim]")
 
 
+def _soften_console_encoding() -> None:
+    """Never let an unencodable character from a remote machine abort a command.
+
+    Windows consoles encode as cp1252. Remote output is not Latin-1 -- signer
+    names, installer logs and event-log text all carry characters cp1252 has no
+    slot for, and a strict encoder raises mid-write, taking the rest of the
+    output with it. Replacing one glyph beats losing the whole run.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
 def main() -> None:
     # Before anything can open a socket: otherwise Paramiko's logging falls
     # through to logging.lastResort and prints protocol chatter to stderr, in
     # the middle of whatever prompt is on screen.
     install_quiet_logging()
+    _soften_console_encoding()
     try:
         app()
     except AccessControlError as exc:
