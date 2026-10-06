@@ -67,7 +67,9 @@ class MediatedAgent:
             return outcome.reply  # denied by the mediator: the server never saw it
         raw = self._server.handle(outcome.forward)
         assert raw is not None
-        return self._filter.filter_response(raw)
+        response = self._filter.filter_response(raw)
+        assert response.forward is not None
+        return response.forward
 
 
 @pytest.fixture(autouse=True)
@@ -158,6 +160,7 @@ class TestMediatedAgentPath:
     def test_read_only_introspection_tools_pass_through_mediated(self, mediated) -> None:
         agent, _, _ = mediated
         agent.send(rpc("initialize", {}, id=1))
+        agent.send(rpc("tools/list", id=4))  # the mediator refuses calls to unlisted tools
         status = agent.send(rpc("tools/call", {"name": "ac_status", "arguments": {}}, id=2))
         assert not status["result"].get("isError")
         assert json.loads(status["result"]["content"][0]["text"])["host_id"] == "win01"
