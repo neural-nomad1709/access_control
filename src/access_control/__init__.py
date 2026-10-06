@@ -18,7 +18,7 @@ Credentials are never stored.  They are prompted for at each hop, held in the
 memory of the session process, and wiped on disconnect.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 APP_NAME = "access_control"
 

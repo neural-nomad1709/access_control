@@ -1,6 +1,6 @@
 [project]
 name = "access-control"
-version = "0.1.0"
+version = "0.2.0"
 description = "Multi-hop bastion automation utility: lets Claude run audited operations on SSH and Windows servers reached through a chain of jump hosts."
 readme = "README.md"
 requires-python = ">=3.12"

@@ -183,7 +183,7 @@ To produce a wheel (hatchling, packages `src/access_control`):
 
 ```powershell
 uv build
-# dist/access_control-0.1.0-py3-none-any.whl
+# dist/access_control-0.2.0-py3-none-any.whl
 ```
 
 Installing that wheel puts an `ac` executable on `PATH`, but note that
