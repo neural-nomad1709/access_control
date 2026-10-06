@@ -16,8 +16,23 @@ jobs:
         # about accidental platform assumptions. The suite is fully offline.
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: access_control
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: access_control
+
+      # pyproject.toml takes the AgentLighthouse packages from a sibling clone
+      # (../AgentLighthouse). Pinned to the commit the suite was last verified
+      # against, so an AL change cannot break this build on its own; bump it
+      # deliberately.
+      - uses: actions/checkout@v4
+        with:
+          repository: neural-nomad1709/agentlighthouse
+          ref: 5ac5db9514e9de43775ddcf6ab79eae228dfdc97
+          path: AgentLighthouse
 
       - uses: astral-sh/setup-uv@v5
         with:
