@@ -42,6 +42,7 @@ scripts/
 *.local.yaml
 *.local.yml
 *.local.md
+.claude/CLAUDE.md
 
 # Session audit logs. The real location is %LOCALAPPDATA%\access_control\logs,
 # but ignore any stray copies written into the repo.
