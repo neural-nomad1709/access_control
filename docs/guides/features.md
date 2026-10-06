@@ -1009,7 +1009,7 @@ Known, and none of them hidden elsewhere in the docs.
     live Windows Server 2022 host, and the SSH path against production AIX
     through a real bastion chain. The bastion → Windows jump → Windows target
     shape is implemented and unit-tested but has not run against live hardware.
-    See [STATUS.md](../../STATUS.md).
+    See [production-readiness.md](../production-readiness.md).
 14. **Campaign fan-out is bounded by human-opened sessions.** No credential
     broker, so hosts without a live session are skipped.
 

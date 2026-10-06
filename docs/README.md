@@ -17,7 +17,7 @@ Start with the row that matches what you are trying to do.
 | **Deploy Claude against production safely** | [CLAUDE_PRODUCTION_GUARDRAILS.md](CLAUDE_PRODUCTION_GUARDRAILS.md) |
 | **Understand how it is built** | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | **Change the code** | [implementation/README.md](implementation/README.md) |
-| **Know the current state and what is missing** | [../STATUS.md](../STATUS.md), [gap-analysis.md](gap-analysis.md), [production-readiness.md](production-readiness.md) |
+| **Know the current state and what is missing** | [gap-analysis.md](gap-analysis.md), [production-readiness.md](production-readiness.md) |
 
 ---
 
@@ -102,7 +102,6 @@ Outside `docs/`:
 | File | Purpose |
 |---|---|
 | [../README.md](../README.md) | Project overview and quick start |
-| [../STATUS.md](../STATUS.md) | Current state of the build and what is next |
 | [../BugFixNchange.md](../BugFixNchange.md) | Bugs fixed, and what is still open |
 | [../config/inventory.example.yaml](../config/inventory.example.yaml) | Annotated inventory template |
 | [../config/operations.yaml](../config/operations.yaml) | The shipped operation catalogue |

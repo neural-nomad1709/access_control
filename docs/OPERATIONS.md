@@ -156,7 +156,7 @@ uv run ac campaign run      config\campaigns\qa-health-sweep.yaml --parallel 4
 Campaigns handle **no credentials**. They attach to sessions that already exist;
 hosts without one are reported and skipped, never connected to. That is the
 current ceiling on fan-out: a human has to open each session. See
-[STATUS.md](../STATUS.md) for where that is heading.
+[production-readiness.md](production-readiness.md) for where that is heading.
 
 ### 3.4 What production use does *not* support
 

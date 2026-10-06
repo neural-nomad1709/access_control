@@ -243,7 +243,7 @@ Running it in production — monitoring, backup, maintenance and upgrades — is
 | [docs/implementation/](docs/implementation/README.md) | Module contracts, CLI reference, audit events, wire protocol |
 | [docs/integration/](docs/integration/) | Optional AgentLighthouse governance integration — per-phase reports, MCP proxy and SIEM guides |
 | [docs/guides/testing.md](docs/guides/testing.md) | Test strategy and the two end-to-end loops |
-| [STATUS.md](STATUS.md) · [BugFixNchange.md](BugFixNchange.md) | Current state, and what is fixed or open |
+| [BugFixNchange.md](BugFixNchange.md) | What is fixed or open |
 
 ### Optional: AgentLighthouse governance
 

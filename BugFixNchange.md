@@ -124,5 +124,4 @@ protects it — every fixed bug in §1 has one, and that is the standard.
 Cross-references:
 [docs/gap-analysis.md](docs/gap-analysis.md) (how each was found),
 [docs/production-readiness.md](docs/production-readiness.md) (which of these
-block production, and in what order to close them),
-[STATUS.md](STATUS.md) (current state).
+block production, and in what order to close them).
