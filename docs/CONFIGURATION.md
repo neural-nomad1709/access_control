@@ -374,8 +374,8 @@ brief:
   id: TB-2026-0812-001        # REQUIRED
   title: …                    # REQUIRED
   host: win-target02            # REQUIRED — a host_id from inventory.yaml
-  requested_by: amit.kala
-  change_ref: CHG0043211
+  requested_by: j.doe
+  change_ref: CHG0001234
   window: "2026-08-12 22:00-23:00 AEST"
   description: >-  …
 

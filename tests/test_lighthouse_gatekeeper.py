@@ -209,7 +209,7 @@ class TestApprovalLifecycle:
         again = governed.request_approval(AGENT, "install-app", "apt-get install -y x", "SES-1")
         assert again.status == "pending" and again.request_id == first.request_id
 
-        assert governed.resolve_approval(first.request_id, "allow", by="user:amit")
+        assert governed.resolve_approval(first.request_id, "allow", by="user:operator")
         approved = governed.request_approval(AGENT, "install-app", "apt-get install -y x", "SES-1")
         assert approved.status == "approved"
         # one approval authorizes one run: the next cycle starts fresh
@@ -218,7 +218,7 @@ class TestApprovalLifecycle:
 
     def test_a_denied_request_reports_denied(self, governed) -> None:
         ticket = governed.request_approval(AGENT, "install-app", "cmd", "SES-1")
-        governed.resolve_approval(ticket.request_id, "deny", by="user:amit")
+        governed.resolve_approval(ticket.request_id, "deny", by="user:operator")
         assert governed.request_approval(AGENT, "install-app", "cmd", "SES-1").status == "denied"
 
     def test_pending_approvals_are_listable_for_the_operator_shell(self, governed) -> None:
@@ -235,7 +235,7 @@ class TestApprovalLifecycle:
         rendered commands are a different request."""
         benign = governed.request_approval(AGENT, "install-app",
                                            "apt-get install -y myapp", "SES-1")
-        governed.resolve_approval(benign.request_id, "allow", by="user:amit")
+        governed.resolve_approval(benign.request_id, "allow", by="user:operator")
         hostile = governed.request_approval(AGENT, "install-app",
                                             "apt-get install -y malware", "SES-1")
         assert hostile.status == "pending", (
@@ -265,7 +265,7 @@ class TestApprovalLifecycle:
                                          "apt-get install -y x", "SES-1")
             assert again.request_id == ticket.request_id
             assert again.status == "pending"
-            gk2.resolve_approval(ticket.request_id, "allow", by="user:amit")
+            gk2.resolve_approval(ticket.request_id, "allow", by="user:operator")
             done = gk2.request_approval(AGENT, "install-app",
                                         "apt-get install -y x", "SES-1")
             assert done.status == "approved"
@@ -349,7 +349,7 @@ class TestPhase2Acceptance:
         request_id = next(r["request_id"] for r in gk.pending_approvals())
         assert str(request_id) in str(held.value)
 
-        assert gk.resolve_approval(request_id, "allow", by="user:amit")
+        assert gk.resolve_approval(request_id, "allow", by="user:operator")
         outcome = engine.run_operation("needs-approval")
         assert outcome.ok
         assert session.commands, "the approved operation must run"
@@ -404,7 +404,7 @@ class TestPhase2Acceptance:
         with pytest.raises(PermissionRequired):
             engine.run_operation("needs-approval")
         request_id = gk.pending_approvals()[0]["request_id"]
-        gk.resolve_approval(request_id, "deny", by="user:amit")
+        gk.resolve_approval(request_id, "deny", by="user:operator")
 
         records = ledger_records(gk)
         assert verify_chain(records, gk.public_key) == len(records)

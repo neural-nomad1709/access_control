@@ -62,7 +62,7 @@ What to do instead:
   username automatically) rather than shared local accounts, so the target's own
   logs name a person. **[CONFIG]**
 - Bind identity in the **trail**: set `AC_AGENT_ID` to something that identifies
-  the run and the human behind it, e.g. `AC_AGENT_ID=claude/amit.kala/CHG0043211`.
+  the run and the human behind it, e.g. `AC_AGENT_ID=claude/j.doe/CHG0001234`.
   It appears on every audit record. **[CONFIG]**
 
 If SSO-brokered access is a hard requirement, the answer is a PAM product
@@ -615,7 +615,7 @@ this tool bypasses every gate in this document.
 ### 8.3 Read-only production session
 
 ```powershell
-$env:AC_AGENT_ID = "claude/amit.kala/INC0098231"
+$env:AC_AGENT_ID = "claude/j.doe/INC0001234"
 $env:AC_HOST_KEY_POLICY = "strict"
 
 uv run ac connect prod-app01 --ops windows-health,collect-diagnostics --idle-timeout 1800
@@ -628,16 +628,16 @@ catalogue. Ad-hoc `ac exec` remains available for `ALLOWED`-class commands only.
 
 ```powershell
 # before the window, offline
-uv run ac brief validate config\briefs\CHG0043211.yaml
-uv run ac brief show     config\briefs\CHG0043211.yaml   # → attach to the ticket
+uv run ac brief validate config\briefs\CHG0001234.yaml
+uv run ac brief show     config\briefs\CHG0001234.yaml   # → attach to the ticket
 
 # in the window, operator's terminal
-$env:AC_AGENT_ID = "claude/amit.kala/CHG0043211"
+$env:AC_AGENT_ID = "claude/j.doe/CHG0001234"
 uv run ac connect prod-app01 --ops install-package,windows-health --idle-timeout 3600
 
 # agent, second terminal
 uv run ac verify prod-app01 --expect-hostname PROD-APP01
-uv run ac brief run config\briefs\CHG0043211.yaml --confirm --json
+uv run ac brief run config\briefs\CHG0001234.yaml --confirm --json
 uv run ac timeline <session-id>
 uv run ac disconnect prod-app01
 ```

@@ -17,8 +17,8 @@ brief:
   title: Short statement of intent # REQUIRED. What a reader should understand in one line.
   host: win-target02                # REQUIRED. Must match a host_id in inventory.yaml.
 
-  requested_by: amit.kala         # Who asked for this
-  change_ref: CHG0043211          # Ticket, so the run is traceable
+  requested_by: j.doe         # Who asked for this
+  change_ref: CHG0001234          # Ticket, so the run is traceable
   window: "2026-08-12 22:00-23:00 AEST"
   description: >-
     A paragraph for whoever reads this at 3am. Why is this being done, what is

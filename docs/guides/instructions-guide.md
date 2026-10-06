@@ -58,8 +58,8 @@ brief:
   id: TB-2026-0812-001            # REQUIRED. Appears in the audit trail.
   title: Install monitoring agent 1.4.2 on the QA application server
   host: win-target02                # REQUIRED. Must be a host_id from inventory.yaml.
-  requested_by: amit.kala
-  change_ref: CHG0043211
+  requested_by: j.doe
+  change_ref: CHG0001234
   window: "2026-08-12 22:00-23:00 AEST"
   description: >-
     Written for whoever reads this at 3am. Why is this being done, what is the

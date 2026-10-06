@@ -198,7 +198,7 @@ To bind a run to a person and a ticket, pass `--agent-id` (or set
 `AC_AGENT_ID`) before connecting:
 
 ```powershell
-$env:AC_AGENT_ID = "claude/amit.kala/CHG0043211"
+$env:AC_AGENT_ID = "claude/j.doe/CHG0001234"
 ```
 
 ---

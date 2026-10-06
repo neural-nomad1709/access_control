@@ -33,6 +33,9 @@ config/inventory copy.yaml
 # forensics, session evidence. These describe real infrastructure and must not
 # be published. Keep them here; publish nothing from this directory.
 reports/
+BizTalk-Installation/
+scripts/
+
 
 # Local, per-user overrides and the unmasked twins of committed documents.
 # STATUS.local.md carries the real host identifiers that STATUS.md redacts.
