@@ -27,6 +27,21 @@ There is no server component, no daemon installed on targets, and no agent
 software deployed anywhere. Everything runs as the operator's own user on the
 operator's own machine.
 
+### 1.1 The system in four layers
+
+Every module belongs to one of four layers. Read the rest of this document with
+this table in mind: each later section is a closer look at one of them.
+
+| Layer | Question it answers | Modules | Detail |
+|---|---|---|---|
+| **Reach** | Can this machine be reached, and by which path? | `routegraph`, `route`, `transport/*`, `session`, `probe` | §4, §5, §6.1 |
+| **Credential custody** | Who holds the passwords, and who never sees them? | `credentials`, `daemon`, `redact` | §7, §10, §11 |
+| **Execution** | What may run, did it work, and why did it fail? | `engine`, `safety`, `brief`, `campaign`, `preflight`, `template` | §6.2, §6.3, §8 |
+| **Governance and evidence** | Who approved it, and what is the record? | `audit`, `gatekeeper`, `mcp_server` | §8.1, §12, §15 |
+
+The agent sits outside all four. It asks the execution layer for work and gets
+structured results back. It never touches reach or custody directly.
+
 ---
 
 ## 2. Component map
@@ -87,6 +102,8 @@ operator's own machine.
 | `context.py` | `NetworkContext`, `AgentIdentity`, `LoggingConfig`, domain qualification. |
 | `credentials.py` | Prompting (terminal / Windows dialog) and the in-memory store. |
 | `audit.py` | Append-only JSONL trail, canonical actions, timeline, Markdown summary. |
+| `gatekeeper.py` | The seam for an external governance plane: authorize, hold for approval, scan output, mirror receipts. `NullGatekeeper` is the default and changes nothing. |
+| `mcp_server.py` | `ac mcp <host>`: seven MCP tools over stdio, each a 1:1 pass-through to a session method. |
 | `redact.py` | Secret registry and scrubbing applied to everything that leaves the process. |
 | `logging_setup.py` | Routes library logging to a file; records unexpected tracebacks. |
 | `paths.py` | Where config, logs and session state live (always outside the repo). |
@@ -351,6 +368,41 @@ Plus two structural constraints that behave like authorization:
   `Session.exec` refuses unless the caller explicitly says it knows it is on the
   hop (only the operator's own prompt does).
 
+### 8.1 Agent-attached sessions and the Gatekeeper seam
+
+A session is marked **agent-attached** when `ac connect` is given an agent id
+(`--agent-id` or `AC_AGENT_ID`) or is itself started inside a Claude Code
+environment. On an agent-attached session the caller's `--confirm` carries no
+weight:
+
+- a gated operation, or a `CONFIRM`-class ad-hoc command, files an approval
+  request through the `Gatekeeper` and is refused until a human resolves it out
+  of band;
+- the request is bound to the exact rendered commands, one approval authorizes
+  one run, and a timeout is a denial;
+- collected output passes through `Gatekeeper.scan_output` before any caller
+  sees it. A hostile finding **taints** the session, after which every
+  operation and command is gated until the session ends.
+
+The `Gatekeeper` protocol has four methods: `authorize`, `request_approval`,
+`scan_output` and `receipt`. Two implementations ship:
+
+| Implementation | Behaviour |
+|---|---|
+| `NullGatekeeper` (default) | Allows everything, scans nothing, drops receipts, and answers approval requests with `not_governed`. A gated action on an agent-attached session therefore cannot run at all |
+| `LighthouseGatekeeper` (`access-control[lighthouse]` extra) | Embeds AgentLighthouse: default-deny tool policy per SPIFFE identity, held approvals, output scanning with taint, and an Ed25519-signed, hash-chained receipt ledger verifiable offline with `al-verify` |
+
+The MCP surface (`ac mcp`) applies the same rule from the other side: it drops
+any `confirmed` argument, and it does not expose tunnels, session lifecycle or
+credentials at all.
+
+Two limits, stated plainly. The CLI does not construct a `LighthouseGatekeeper`
+today, so `ac connect` always runs with `NullGatekeeper`; the embedded plane is
+reachable only by passing `gatekeeper=` to `daemon.build_session` from code. And
+a session opened from a plain terminal with no agent id is *not* agent-attached,
+so an agent driving it can still satisfy the gate with `--confirm`. Both are
+addressed in §19.
+
 The real access control is still the estate's: `sshd_config`, firewall rules,
 WinRM ACLs, and the account's own rights. This tool's gates constrain *this
 tool*; they do not constrain a human with a shell. That distinction is stated
@@ -448,7 +500,8 @@ instead of a connection error.
 ║ ZONE 4 — the agent (Claude) / any thin client                       ║
 ║   Sees: host ids, rendered commands, stdout/stderr, exit codes,     ║
 ║   collected logs, audit summaries. Never sees a credential, and     ║
-║   cannot drive a prompt. Its only interface is `uv run ac …`.       ║
+║   cannot drive a prompt. Its interfaces are `uv run ac …` and the   ║
+║   seven MCP tools served by `ac mcp`.                               ║
 ╚═════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -478,7 +531,8 @@ Boundary properties worth stating explicitly:
 | SSH agent | local | `paramiko.Agent()` when `auth.method: agent` |
 | `known_hosts` | local file | `~/.ssh/known_hosts`, or `AC_KNOWN_HOSTS` |
 | SIEM / log collection | outbound, pull | JSONL under `logging.path`; canonical `timestamp`/`agentId`/`sessionId`/`action` fields need no transform |
-| Claude / any agent | local | `Bash(uv run ac …)` with `--json`; one permission surface |
+| Claude / any agent | local | `Bash(uv run ac …)` with `--json`, or the MCP stdio server `ac mcp <host>` attached to a live session |
+| AgentLighthouse (optional) | local | Embedded through the `Gatekeeper` seam, or in front of `ac mcp` as an MCP proxy (`al mcp proxy -- uv run ac mcp <host>`). See [integration/](integration/) |
 | Change management | manual | `brief.change_ref` recorded in the trail and every report |
 
 There are **no** inbound network integrations, no database, no message queue, no
@@ -601,3 +655,84 @@ See [INSTALLATION.md](INSTALLATION.md) and
 Each of these is expanded, with the alternative that solves it, in
 [guides/features.md](guides/features.md#honest-limitations) and
 [production-readiness.md](production-readiness.md).
+
+---
+
+## 18. What this architecture does well
+
+The design review of 2026-11-09 compared this tool with the products that let
+AI agents act on infrastructure. The market findings below come from vendor
+pages and trade press and were not independently verified; the statements about
+this codebase were checked against the source.
+
+### 18.1 Strengths that other tools were not found to have
+
+| Strength | Why it matters | Where |
+|---|---|---|
+| **Nothing is installed in the estate** | The tool rides the bastions and accounts that already exist. Every agent-access product reviewed needs a gateway, worker or agent inside the network. This suits estates the operator does not own (consultants, MSPs, vendor support) and estates where nothing new may be deployed | §16 |
+| **SSH bastion → Windows jump → WinRM in one chain** | Real output streams and exit codes from Windows hosts behind an SSH bastion, including a nested `Invoke-Command` leg. No comparable multi-hop WinRM path was found elsewhere | §5 |
+| **A reviewed catalogue is the allow-list** | An agent runs named, parameterised operations that were reviewed like code and bound to specific hosts. It needs no server platform behind it | §6.2, §8 |
+| **Environment is a hard boundary** | A route may not cross from QA into PROD, and this is checked when the config is read. It answers the "agent working in staging damaged production" class of incident | §4 |
+| **Wrong-host identity check** | A port forward carries no identity, so a stale tunnel yields a session that works perfectly against the wrong server. Preflight asks the machine its own name before anything else runs | `preflight.py` |
+| **Failure diagnosis is part of the contract** | A failed step returns the exit code, the nominated logs, a human-written hint and the exact resume command. This is what makes "read the logs and fix it" tractable for an agent | §6.2 |
+
+### 18.2 Strengths that are sound but not unique
+
+These are done well here, and several other products also offer them. They are
+expected by any buyer and are not reasons to choose this tool over another.
+
+| Strength | Note |
+|---|---|
+| The agent never sees a credential | Per-hop prompting, memory only, wiped on disconnect, redacted at the type level (§7) |
+| The target never instructs the agent | Instructions come only from reviewed YAML in the repository (§8) |
+| A degraded session authorizes nothing | Held at a hop, it withdraws every operation (§9) |
+| The engine never remediates | It observes and reports; the agent or operator decides (§6.2) |
+| Approval bound to the exact rendered command | One approval, one run, timeout is a denial (§8.1) |
+| Signed, offline-verifiable receipts | Through the optional AgentLighthouse seam (§8.1) |
+| Honest tests | A real in-process SSH server with real forwarding and partial authentication, not mocks |
+
+### 18.3 Where the architecture is weakest
+
+Recorded here so that §18 is not read as a claim of completeness. Detail and
+severity are in [production-readiness.md](production-readiness.md).
+
+1. **Ad-hoc commands are default-allow.** `run_command` runs anything the
+   pattern list in `safety.py` does not match.
+2. **Agent-attached mode depends on how the session was opened** (§8.1).
+3. **The embedded governance plane is not wired into the CLI** (§8.1).
+4. **Controls are client-side.** The daemon runs as the same OS user as the
+   agent, so the session socket is a convenience boundary (§11).
+5. **Agent identity is a string the caller chooses.** Nothing attests to it.
+6. **Integration is Claude-centric.** Other agents have no documented path in.
+
+---
+
+## 19. Product direction (planned, not built)
+
+> Nothing in this section exists in the code yet. It records the direction
+> proposed in the design review of 2026-11-09, which is still open for
+> decision, so that later changes can be judged against it.
+
+**Positioning.** Governed operations for agents on estates you cannot install
+into. The tool is the remote-action counterpart of a local sandbox: any agent
+harness (Claude Code, Codex, Gemini CLI, Cursor, an SDK-built agent) plugs into
+it, and it is not itself a harness.
+
+| Layer (§1.1) | Today | Planned change | Closes |
+|---|---|---|---|
+| Credential custody | Daemon runs as the operator's own user | Run the daemon under a separate OS identity so the agent cannot read the session descriptor or the daemon's memory | §18.3 item 4 |
+| Execution | Ad-hoc commands are default-allow behind a pattern list | Catalogue operations become the default door. Ad-hoc commands become default-deny: read-only commands recognised by argument grammar run, everything else is held for approval | §18.3 item 1 |
+| Governance | Agent-attached only when declared; approvals need AgentLighthouse, which the CLI cannot attach | Every session reached over the socket or MCP is treated as agent-driven. A built-in approval in the operator's window makes a plain install safe. `ac connect` can attach the AgentLighthouse plane | §18.3 items 2, 3 |
+| Agent surface | CLI with `--json`; MCP over stdio | MCP over stdio and HTTP, plus setup guides for agents other than Claude | §18.3 item 6 |
+| Evidence | JSONL trail; signed receipts via the seam | Add OpenTelemetry spans; keep both existing records | — |
+
+**Deliberately out of scope:** an agent loop, an MCP gateway, a credential
+vault, a local sandbox and an identity provider. Mature projects exist for each,
+and the tool should sit behind or beside them.
+
+**The risk in this direction.** Keeping a present human and installing nothing
+caps the tool at one operator per workstation. Adding a central server would
+remove that cap and also remove the property in §18.1 that no competitor has.
+That trade is to be decided deliberately, as
+[production-readiness.md](production-readiness.md) already says of a credential
+broker.
