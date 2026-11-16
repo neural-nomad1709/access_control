@@ -50,11 +50,18 @@ agent ──stdio JSON-RPC──▶ al mcp proxy ──stdio──▶ uv run ac 
    `policy.tool_policy_path`, so `config/al-mcp-proxy.yaml` wires the two
    together.
 
+3. The integrated install, which is what provides the `al` command (see
+   [INSTALLATION.md](../INSTALLATION.md#optional-agentlighthouse-integration)):
+
+   ```
+   uv sync --extra dev --extra lighthouse --group lighthouse-test
+   ```
+
 ## Launch
 
 ```
 export AL_ADMIN_API_TOKEN=…    # the proxy's Runtime needs it; never in a file
-al mcp proxy \
+uv run --extra lighthouse al mcp proxy \
     --actor spiffe://access-control/agent/claude-j-doe-inc0001234 \
     --session prod-app01 \
     --config config/al-mcp-proxy.yaml \

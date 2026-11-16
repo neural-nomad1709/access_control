@@ -257,6 +257,20 @@ The seam is a single `Gatekeeper` interface whose default (`NullGatekeeper`)
 changes nothing; the integration is opt-in and documented in
 [docs/integration/](docs/integration/).
 
+The two modes use different commands, so it is always clear which one is
+running. Every command elsewhere in this README is the standalone one.
+
+| | Standalone (no AgentLighthouse) | Integrated with AgentLighthouse |
+|---|---|---|
+| Install | `uv sync --extra dev` | `uv sync --extra dev --extra lighthouse --group lighthouse-test` |
+| Run the tool | `uv run ac …` | `uv run --extra lighthouse ac …` |
+| Test suite | `uv run pytest` | `uv run --extra lighthouse --group lighthouse-test pytest` |
+| AgentLighthouse CLIs | not installed | `uv run --extra lighthouse al …`, `uv run --extra lighthouse al-verify …` |
+
+AgentLighthouse is taken from a release tag pinned in `pyproject.toml`, never
+from a local checkout, so the standalone tool does not need it to exist. Details:
+[docs/INSTALLATION.md](docs/INSTALLATION.md#optional-agentlighthouse-integration).
+
 **Deciding whether this is the right tool?** Start with
 [docs/guides/features.md](docs/guides/features.md). It is candid about where
 Ansible, Teleport or plain `plink` is the better answer.

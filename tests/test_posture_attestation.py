@@ -7,7 +7,7 @@ the attestation for the `access-control` org must (a) count ac's own actions —
 vocabulary flows all the way into the governance artefact, and (b) verify with
 the standalone `al-verify`, needing no runtime.
 
-Needs the [lighthouse] extra plus al-governance (dev group); a plain install
+Needs the [lighthouse] extra plus the lighthouse-test group; a plain install
 skips.
 """
 
@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("al_core", reason="requires the [lighthouse] extra")
-pytest.importorskip("al_governance", reason="requires al-governance (dev group)")
+pytest.importorskip("al_governance", reason="requires the lighthouse-test group")
 
 from al_governance.attestation import build_attestation  # noqa: E402
 from al_verify.verify import verify_attestation  # noqa: E402

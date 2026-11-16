@@ -25,19 +25,21 @@ dev = [
     { name = "pytest-cov" },
 ]
 lighthouse = [
-    { name = "al-core" },
+    { name = "agentlighthouse-core" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "al-governance" },
     { name = "pytest" },
     { name = "pytest-cov" },
+]
+lighthouse-test = [
+    { name = "agentlighthouse-governance" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "al-core", marker = "extra == 'lighthouse'", editable = "../AgentLighthouse/core" },
+    { name = "agentlighthouse-core", marker = "extra == 'lighthouse'", git = "https://github.com/neural-nomad1709/agentlighthouse?subdirectory=core&tag=v0.4.0" },
     { name = "paramiko", specifier = ">=3.4,<5" },
     { name = "pypsrp", specifier = ">=0.8" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -51,17 +53,17 @@ provides-extras = ["dev", "lighthouse"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "al-governance", editable = "../AgentLighthouse/governance" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
 ]
+lighthouse-test = [{ name = "agentlighthouse-governance", git = "https://github.com/neural-nomad1709/agentlighthouse?subdirectory=governance&tag=v0.4.0" }]
 
 [[package]]
-name = "al-core"
-version = "0.3.0"
-source = { editable = "../AgentLighthouse/core" }
+name = "agentlighthouse-core"
+version = "0.4.0"
+source = { git = "https://github.com/neural-nomad1709/agentlighthouse?subdirectory=core&tag=v0.4.0#861ad62ed520bfd8c3ca8c7a7ec6723d3eb43e42" }
 dependencies = [
-    { name = "al-verify" },
+    { name = "agentlighthouse-verify" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -74,59 +76,26 @@ dependencies = [
     { name = "watchfiles" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "al-verify", editable = "../AgentLighthouse/verify" },
-    { name = "cryptography", specifier = ">=43" },
-    { name = "detect-secrets", marker = "extra == 'scanners'", specifier = ">=1.5" },
-    { name = "fastapi", specifier = ">=0.111" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2" },
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "pydantic-settings", specifier = ">=2.3" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "regex", specifier = ">=2024.11.6" },
-    { name = "typer", specifier = ">=0.12" },
-    { name = "uvicorn", specifier = ">=0.30" },
-    { name = "watchfiles", specifier = ">=0.22" },
-]
-provides-extras = ["scanners", "postgres"]
-
 [[package]]
-name = "al-governance"
-version = "0.3.0"
-source = { editable = "../AgentLighthouse/governance" }
+name = "agentlighthouse-governance"
+version = "0.4.0"
+source = { git = "https://github.com/neural-nomad1709/agentlighthouse?subdirectory=governance&tag=v0.4.0#861ad62ed520bfd8c3ca8c7a7ec6723d3eb43e42" }
 dependencies = [
-    { name = "al-core" },
-    { name = "al-verify" },
+    { name = "agentlighthouse-core" },
+    { name = "agentlighthouse-verify" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "typer" },
     { name = "uvicorn" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "al-core", editable = "../AgentLighthouse/core" },
-    { name = "al-verify", editable = "../AgentLighthouse/verify" },
-    { name = "cryptography", specifier = ">=43" },
-    { name = "fastapi", specifier = ">=0.111" },
-    { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2" },
-    { name = "typer", specifier = ">=0.12" },
-    { name = "uvicorn", specifier = ">=0.30" },
-]
-provides-extras = ["postgres"]
-
 [[package]]
-name = "al-verify"
-version = "0.3.0"
-source = { editable = "../AgentLighthouse/verify" }
+name = "agentlighthouse-verify"
+version = "0.4.0"
+source = { git = "https://github.com/neural-nomad1709/agentlighthouse?subdirectory=verify&tag=v0.4.0#861ad62ed520bfd8c3ca8c7a7ec6723d3eb43e42" }
 dependencies = [
     { name = "cryptography" },
 ]
-
-[package.metadata]
-requires-dist = [{ name = "cryptography", specifier = ">=43" }]
 
 [[package]]
 name = "annotated-doc"
