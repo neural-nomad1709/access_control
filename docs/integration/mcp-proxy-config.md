@@ -51,7 +51,7 @@ agent ──stdio JSON-RPC──▶ al mcp proxy ──stdio──▶ uv run ac 
    together.
 
 3. The integrated install, which is what provides the `al` command (see
-   [INSTALLATION.md](../INSTALLATION.md#optional-agentlighthouse-integration)):
+   [README.md](README.md#2-commands)):
 
    ```
    uv sync --extra dev --extra lighthouse --group lighthouse-test

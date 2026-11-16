@@ -1,5 +1,14 @@
 # Documentation map
 
+The documentation is in two parts:
+
+1. **The standalone product** — everything in this map except
+   `integration/`. No AgentLighthouse is needed, and every command is a
+   standalone one (`uv sync --extra dev`, `uv run ac …`, `uv run pytest`).
+2. **Integrated with AgentLighthouse** —
+   [integration/README.md](integration/README.md). Its own commands, the MCP
+   proxy, current state, plan and phase reports.
+
 Start with the row that matches what you are trying to do.
 
 | I want to… | Read |
@@ -18,6 +27,7 @@ Start with the row that matches what you are trying to do.
 | **Understand how it is built** | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | **Change the code** | [implementation/README.md](implementation/README.md) |
 | **Know the current state and what is missing** | [gap-analysis.md](gap-analysis.md), [production-readiness.md](production-readiness.md) |
+| **Run it integrated with AgentLighthouse** | [integration/README.md](integration/README.md) |
 
 ---
 
@@ -91,10 +101,11 @@ docs/
     cli-reference.md               every command, flag and exit code
     audit-events.md                every audit record and its fields
     session-protocol.md            the loopback wire protocol
-  reports/
-    README.md                      what these are, and what they are not
-    axway-session-error-report.md  connectivity/session findings, Axway CVT
-    axway-app01-log-error-report.md application log findings, app-stg01
+  integration/                     PART 2: integrated with AgentLighthouse
+    README.md                      start here: commands, state, plan
+    mcp-proxy-config.md            ac mcp behind the AgentLighthouse proxy
+    siem-combined-stream.md        one SIEM stream for both audit trails
+    00-context.md … 06-phase-4-report.md   phase reports (history)
 ```
 
 Outside `docs/`:

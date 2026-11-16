@@ -100,7 +100,7 @@ This creates `.venv/` and installs from the locked `uv.lock`.
 | `rich>=13.0` | Terminal rendering |
 | `pywin32>=306` | Windows credential dialog — **Windows only**, skipped elsewhere |
 | `pytest`, `pytest-cov` | The `dev` extra: test suite |
-| `agentlighthouse-*` | **Not installed by default.** See [Optional: AgentLighthouse integration](#optional-agentlighthouse-integration) |
+| `agentlighthouse-*` | **Not installed.** Only the integrated mode uses them: [integration/README.md](integration/README.md) |
 
 `spnego` arrives transitively with `pypsrp` and provides the pure-Python NTLM
 provider.
@@ -116,57 +116,10 @@ pip install -e ".[dev]"
 ac doctor
 ```
 
-### Optional: AgentLighthouse integration
-
-Everything above is the standalone install. It contains no AgentLighthouse
-package and does not need an AgentLighthouse checkout on the machine.
-
-The integrated mode has its own commands. Nothing is shared with the standalone
-ones, so the command you type tells you which mode you are in.
-
-| | Standalone | Integrated with AgentLighthouse |
-|---|---|---|
-| Install | `uv sync --extra dev` | `uv sync --extra dev --extra lighthouse --group lighthouse-test` |
-| Run the tool | `uv run ac …` | `uv run --extra lighthouse ac …` |
-| Test suite | `uv run pytest` | `uv run --extra lighthouse --group lighthouse-test pytest` |
-| AgentLighthouse CLIs | not installed | `uv run --extra lighthouse al …` and `uv run --extra lighthouse al-verify …` |
-
-What the two flags add:
-
-| Flag | Installs | Import name | Used for |
-|---|---|---|---|
-| `--extra lighthouse` | `agentlighthouse-core`, `agentlighthouse-verify` | `al_core`, `al_verify` | The embedded `LighthouseGatekeeper`, the `al` MCP proxy, `al-verify` |
-| `--group lighthouse-test` | `agentlighthouse-governance` | `al_governance` | Only the posture-attestation test. Never a runtime dependency |
-
-In the standalone mode the three AgentLighthouse test files skip themselves, so
-`uv run pytest` stays green with fewer tests collected.
-
-`uv sync` installs exactly what it is asked for. Running the standalone
-`uv sync --extra dev` after an integrated install removes the AgentLighthouse
-packages again; rerun the integrated install to bring them back.
-
-**Where AgentLighthouse comes from.** `pyproject.toml` pins all three packages
-to one release tag of
-[the AgentLighthouse repository](https://github.com/neural-nomad1709/agentlighthouse)
-(`[tool.uv.sources]`), and `uv.lock` records the exact commit. The first
-integrated install needs network access to GitHub. Because `tool.uv.sources` is
-a uv feature, the integrated mode needs uv; the plain-venv `pip` route above is
-standalone only.
-
-**Moving to a newer AgentLighthouse release.** Change the `tag` on all three
-source lines, then:
-
-```powershell
-uv lock
-uv run --extra lighthouse --group lighthouse-test pytest
-```
-
-AgentLighthouse renamed its packages in 0.4.0 (`al-core`, `al-verify` and
-`al-governance` became `agentlighthouse-core`, `agentlighthouse-verify` and
-`agentlighthouse-governance`). The import names and the `al`, `al-verify` and
-`al-gov` commands did not change. Documents under
-[integration/](integration/) written before that release use the old package
-names.
+This install is the standalone product. It contains no AgentLighthouse package
+and does not need an AgentLighthouse checkout on the machine. Running integrated
+with AgentLighthouse uses different commands, documented separately in
+[integration/README.md](integration/README.md).
 
 ---
 
@@ -305,13 +258,16 @@ uv run ac disconnect <host>
 ## 8. Run the test suite
 
 ```powershell
-uv run pytest                                            # 340 tests, fully offline
+uv run pytest                                            # 435 passed, 3 skipped; fully offline
 uv run pytest -q tests/test_e2e.py                       # the two end-to-end loops
 uv run pytest --cov=access_control --cov-report=term-missing
 ```
 
 Every test runs offline — the SSH layer is exercised against a real Paramiko SSH
 server started in-process, not a mock. See [guides/testing.md](guides/testing.md).
+
+The 3 skipped are the AgentLighthouse integration tests, which run only in the
+integrated mode ([integration/README.md](integration/README.md#4-tests-that-need-the-integration)).
 
 ---
 

@@ -33,7 +33,7 @@ Both green; no Phase 0 test-fixing work exists.
 > AgentLighthouse 0.4.0 the packages are named `agentlighthouse-core`,
 > `agentlighthouse-verify` and `agentlighthouse-governance`, and access_control
 > takes them from a pinned release tag, not a sibling path. Current commands:
-> [INSTALLATION.md](../INSTALLATION.md#optional-agentlighthouse-integration).
+> [README.md](README.md#2-commands).
 
 AgentLighthouse is a **uv workspace** (root `agentlighthouse`, `package = false`, members `core`, `verify`, `governance`). `core/` builds distribution **al-core** (hatchling, `packages = ["al_core"]`, CLI `al`); `verify/` builds **al-verify** (CLI `al-verify`, sole dep `cryptography>=43`). al-core depends on al-verify via `{ workspace = true }`, which does **not** resolve outside that workspace. access_control is a single uv project (not a workspace).
 

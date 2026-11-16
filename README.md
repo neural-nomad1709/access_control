@@ -241,35 +241,24 @@ Running it in production — monitoring, backup, maintenance and upgrades — is
 | [docs/CLAUDE_PRODUCTION_GUARDRAILS.md](docs/CLAUDE_PRODUCTION_GUARDRAILS.md) | Deploying Claude against a live production session |
 | [docs/guides/features.md](docs/guides/features.md) | Every feature, and how it compares to plink, Ansible, mRemoteNG, Teleport and PAM tools |
 | [docs/implementation/](docs/implementation/README.md) | Module contracts, CLI reference, audit events, wire protocol |
-| [docs/integration/](docs/integration/) | Optional AgentLighthouse governance integration — per-phase reports, MCP proxy and SIEM guides |
+| [docs/integration/README.md](docs/integration/README.md) | **Integrated with AgentLighthouse:** its own commands, the MCP proxy, the plan, the phase reports |
 | [docs/guides/testing.md](docs/guides/testing.md) | Test strategy and the two end-to-end loops |
 | [BugFixNchange.md](BugFixNchange.md) | What is fixed or open |
 
-### Optional: AgentLighthouse governance
+### Standalone, or integrated with AgentLighthouse
 
-A plain install is fully standalone and behaves exactly as this README
-describes. With the optional `access-control[lighthouse]` extra, the tool can
-run behind [AgentLighthouse](https://github.com/neural-nomad1709/agentlighthouse)
-as its governance plane: out-of-band human approval that a flag cannot satisfy,
+This README, and everything in `docs/` outside `docs/integration/`, describes
+the **standalone product**. It needs no AgentLighthouse install or checkout, and
+every command shown here is a standalone command.
+
+Optionally, the tool can run integrated with
+[AgentLighthouse](https://github.com/neural-nomad1709/agentlighthouse) as its
+governance plane: out-of-band human approval that a flag cannot satisfy,
 identity-bound default-deny tool policy, output scanning with taint escalation,
 and a signed, hash-chained receipt ledger verifiable offline with `al-verify`.
-The seam is a single `Gatekeeper` interface whose default (`NullGatekeeper`)
-changes nothing; the integration is opt-in and documented in
-[docs/integration/](docs/integration/).
-
-The two modes use different commands, so it is always clear which one is
-running. Every command elsewhere in this README is the standalone one.
-
-| | Standalone (no AgentLighthouse) | Integrated with AgentLighthouse |
-|---|---|---|
-| Install | `uv sync --extra dev` | `uv sync --extra dev --extra lighthouse --group lighthouse-test` |
-| Run the tool | `uv run ac …` | `uv run --extra lighthouse ac …` |
-| Test suite | `uv run pytest` | `uv run --extra lighthouse --group lighthouse-test pytest` |
-| AgentLighthouse CLIs | not installed | `uv run --extra lighthouse al …`, `uv run --extra lighthouse al-verify …` |
-
-AgentLighthouse is taken from a release tag pinned in `pyproject.toml`, never
-from a local checkout, so the standalone tool does not need it to exist. Details:
-[docs/INSTALLATION.md](docs/INSTALLATION.md#optional-agentlighthouse-integration).
+The integrated mode has its own install, run and test commands, its current
+state and its plan in
+**[docs/integration/README.md](docs/integration/README.md)**.
 
 **Deciding whether this is the right tool?** Start with
 [docs/guides/features.md](docs/guides/features.md). It is candid about where

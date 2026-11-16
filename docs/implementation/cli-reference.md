@@ -80,7 +80,7 @@ Read-only. The credential store is cleared when it finishes.
 
 ## Sessions
 
-### `ac connect <host> [--ops a,b] [--idle-timeout N] [--no-shell] [--no-fallback]`
+### `ac connect <host> [--ops a,b] [--idle-timeout N] [--max-lifetime N] [--no-shell] [--no-fallback] [--agent-id ID]`
 
 **Run this in your own terminal.** It is the only place a password prompt can
 appear. Prompts once per hop, then holds the authenticated path open, serves it
@@ -90,8 +90,10 @@ on a loopback socket, and gives you a prompt on the host.
 |---|---|---|
 | `--ops a,b` | all permitted for the host | Restrict this session to these operations. The session then refuses anything else even if `operations.yaml` is edited underneath it |
 | `--idle-timeout N` | `1800` | Seconds of inactivity before the session closes and credentials are wiped. `0` = never |
+| `--max-lifetime N` | `0` | Absolute seconds before the session closes regardless of activity, measured from connect. Bounds a continuously driven session the idle timer alone would keep open. `0` = no ceiling |
 | `--no-shell` | off | Hold the session open with no prompt — for a service wrapper, or a log you want kept clean. Close with Ctrl-C |
 | `--no-fallback` | off | Fail outright if the target leg fails, instead of holding the session at the last hop that authenticated |
+| `--agent-id ID` | generated per run | Agent id recorded on every audit line for this session, e.g. a per-window name (`AGT-web01`) or a batch tag. Overrides `AC_AGENT_ID` |
 
 Refuses to start if a session for that host already exists. Warns if this is not
 an interactive terminal.
@@ -338,6 +340,25 @@ falls back with a note. `--remote-port` overrides the node's declared port.
 
 Refused for a node declared `preestablished: true` — there is nothing for this
 command to build.
+
+---
+
+## Agent access
+
+### `ac mcp <host>`
+
+Serves the live session for `<host>` as an MCP server on stdio. Needs a session
+already open with `ac connect`; it attaches to it and opens nothing itself.
+
+The tools are a 1:1 wrapper of the agent-facing daemon methods: `ac_status`,
+`ac_preflight`, `ac_operations`, `ac_preview`, `ac_run_operation`,
+`ac_run_command`, `ac_fetch_log`. Tunnels, credentials and session lifecycle are
+not exposed, and `confirmed` is stripped from every call, so an agent cannot
+self-approve a gated operation through it. Details:
+[session-protocol.md](session-protocol.md#the-mcp-face).
+
+It is designed to run behind AgentLighthouse's MCP proxy, which is part of the
+integrated mode: [../integration/mcp-proxy-config.md](../integration/mcp-proxy-config.md).
 
 ---
 

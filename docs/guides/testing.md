@@ -18,16 +18,28 @@ against a mock.
 |---|---:|---|
 | `test_config.py` | 44 | Inventory and catalog parsing, `via:` compilation, validation, host_id/tag binding, variable resolution |
 | `test_route.py` | 14 | Every route shape and every rejected topology |
-| `test_routegraph.py` | 64 | Declared edges, resolution, mandatory ports, pre-established tunnels, environment boundaries, domain qualifying, agent identity, logging config |
+| `test_routegraph.py` | 65 | Declared edges, resolution, mandatory ports, pre-established tunnels, environment boundaries, domain qualifying, agent identity, logging config |
 | `test_security.py` | 65 | Redaction, the command deny-list, credential handling |
 | `test_engine.py` | 58 | Templating, exit-code parsing, expectations, gating, dry run, failure diagnosis, the operation report, canonical actions, timeline |
-| `test_daemon.py` | 19 | Session descriptors and the loopback protocol, over real sockets |
+| `test_daemon.py` | 21 | Session descriptors and the loopback protocol, over real sockets |
+| `test_session_lifetime.py` | 10 | The absolute session lifetime (`--max-lifetime`) alongside the idle timeout |
 | `test_brief.py` | 47 | Task brief parsing and validation, preflight checks, host-identity matching, check ordering |
+| `test_cli_brief_postcheck.py` | 4 | A brief's `postcheck:` block actually runs |
 | `test_campaign.py` | 11 | Campaign parsing, offline planning and retargeting, concurrent dispatch with a fake client, skip-on-no-session, per-target isolation |
+| `test_cli_tunnel.py` | 4 | `ac tunnel --port` reaches the transport, attached and ephemeral |
+| `test_cli_output_encoding.py` | 2 | Remote output cannot abort the CLI on a cp1252 console |
+| `test_mcp_server.py` | 18 | `ac mcp`: the tool surface is a 1:1 wrapper, operator-only methods absent, `confirmed` stripped |
+| `test_agent_permission_policy.py` | 4 | `.claude/settings.json` matches the agent permission policy in CLAUDE_PRODUCTION_GUARDRAILS.md §8.2 |
+| `test_gatekeeper.py` | 14 | The `Gatekeeper` seam: `NullGatekeeper` changes nothing, the session owns the gatekeeper |
+| `test_engine_governed.py` | 20 | The engine's authorization, approval and output-scan call sites, driven by a scripted gatekeeper |
+| `test_operator_shell_approve.py` | 7 | The `:approve` verb at the operator prompt |
+| `test_packaging_independence.py` | 9 | The standalone install names no AgentLighthouse package and no source outside the repo |
 | `test_e2e.py` | 18 | Two full cycles, the agent path, chain failure modes, hop fallback, forwarding detection, probe reporting — over real SSH |
-| **Total** | **340** | |
+| **Total (standalone)** | **435** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
 
-Counts move as tests are added; `uv run pytest` is the authority.
+Counts move as tests are added; `uv run pytest` is the authority. On a machine
+that has had the integrated install, run `uv sync --extra dev` first, or the
+integration tests run too.
 
 ## Why the SSH server is real
 
