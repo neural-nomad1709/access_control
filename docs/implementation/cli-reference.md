@@ -426,7 +426,7 @@ duration. The fastest first look after a failure.
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | An `AccessControlError`, a failed `doctor`, or an unexpected exception (traceback appended to `<log dir>/errors.log`) |
+| `1` | An `AccessControlError`, a failed `doctor`, or an unexpected exception (traceback appended to `<log dir>/errors.log`). Also a reader that stopped early (`ac ops \| Select-Object -First 3`): `ac` stops quietly and logs nothing |
 | `2` | The work itself failed: a failed operation, brief, campaign, or preflight/verify |
 | `130` | Cancelled with Ctrl-C |
 

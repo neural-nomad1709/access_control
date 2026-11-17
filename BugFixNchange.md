@@ -13,6 +13,7 @@ from the code audit of 2026-08-17, `C-nn` changes, `D-nn` documentation debt.
 | Area | What changed | Ids |
 |---|---|---|
 | Agent approvals | `ac mcp` declares every run as an agent's, so gated work arriving over MCP is held for `:approve` even on a session opened without `--agent-id` | F-01r (part) |
+| CLI | A reader that stops early (`ac ops \| Select-Object -First 3`) no longer leaves a traceback in `errors.log` | B-19 |
 
 ### v0.2.1 (2026-11-16)
 
@@ -70,6 +71,7 @@ The last commit before the integration work is tagged
 | B-16 | Concurrent sessions could share a `session_id`, and two starting in the same second could share a `trace_id` — which names the log file, so **two sessions' audit trails interleaved in one `.jsonl`** | A file-based sequence counter guarded by a `threading.Lock`, which serialises threads within one process but not separate `ac connect` processes | Ids carry a random 6-hex suffix (`SES-3f9a1c`, `trace_id` `20260812T091520Z-3f9a1c`) and need no coordination; the counter and its `state/*.seq` files were removed | `test_routegraph.py::TestAgentIdentity::test_same_second_runs_get_distinct_trace_ids` |
 | B-17 | Every `uv run ac …` and `uv sync` failed with `Package metadata name 'agentlighthouse-governance' does not match given name 'al-governance'`, although the standalone tool uses no AgentLighthouse code | AgentLighthouse 0.4.0 renamed its packages. `pyproject.toml` took them from a sibling checkout, and uv validates every declared source on each run, including ones it is not installing | The packages use their new names and come from one pinned release tag (`[tool.uv.sources]`, git + `tag`); `agentlighthouse-governance` moved to the opt-in `lighthouse-test` group; CI runs both modes | `test_packaging_independence.py` |
 | B-18 | `ac rdp` / `ac shell` against a node whose address is a pre-established forward built a second tunnel to `localhost` from the bastion, which is the bastion itself | Both commands tunnelled to whatever address they were given | The client is pointed straight at the forward: no tunnel, no hop authentication. `ac rdp` still records `RDP_LAUNCH`, and is refused when only another protocol was forwarded | `test_cli_interactive_leg.py` |
+| B-19 | Piping `ac` into a reader that stops early (`ac ops \| Select-Object -First 3`) logged an `OSError: [Errno 22]` traceback to `errors.log` and exited as a crash | Windows reports a write to a closed pipe as `OSError` errno 22 (POSIX: `BrokenPipeError`), and `main` treated it as an unexpected failure | `sys.stdout` is wrapped so a failed write surfaces as `BrokenPipeError` on both platforms; `main` then points stdout at devnull and exits 1 without a message. An errno 22 from anywhere else is still recorded | `test_cli_closed_pipe.py` (runs the real CLI in a subprocess) |
 
 ### 2.2 Audit findings closed
 

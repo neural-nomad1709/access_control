@@ -33,15 +33,16 @@ against a mock.
 | `test_cli_brief_duration.py` | 4 | `rules.max_duration_minutes` stops a brief from starting further operations |
 | `test_logging_setup.py` | 9 | `logging.level` sets `transport.log` verbosity; `transport.log` and `errors.log` roll over by size |
 | `test_cli_output_encoding.py` | 2 | Remote output cannot abort the CLI on a cp1252 console |
-| `test_mcp_server.py` | 18 | `ac mcp`: the tool surface is a 1:1 wrapper, operator-only methods absent, `confirmed` stripped |
+| `test_cli_closed_pipe.py` | 7 | A reader that stops early (`ac ops \| head`) ends `ac` quietly, with no traceback in `errors.log`; the last test runs the real CLI in a subprocess |
+| `test_mcp_server.py` | 22 | `ac mcp`: the tool surface is a 1:1 wrapper, operator-only methods absent, `confirmed` stripped, every run declared an agent's |
 | `test_agent_permission_policy.py` | 4 | `.claude/settings.json` matches the agent permission policy in CLAUDE_PRODUCTION_GUARDRAILS.md §8.2 |
 | `test_gatekeeper.py` | 14 | The `Gatekeeper` seam: `NullGatekeeper` changes nothing, the session owns the gatekeeper |
 | `test_engine_governed.py` | 20 | The engine's authorization, approval and output-scan call sites, driven by a scripted gatekeeper |
 | `test_operator_shell_approve.py` | 7 | The `:approve` verb at the operator prompt |
 | `test_local_approvals.py` | 32 | An agent's gated request is held until the operator approves: the local approval store, the engine, the session socket, the prompt, and clients declaring an agent caller |
 | `test_packaging_independence.py` | 9 | The standalone install names no AgentLighthouse package and no source outside the repo |
-| `test_e2e.py` | 18 | Two full cycles, the agent path, chain failure modes, hop fallback, forwarding detection, probe reporting — over real SSH |
-| **Total (standalone)** | **516** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
+| `test_e2e.py` | 19 | Two full cycles, the agent path (including gated work over MCP waiting for `:approve`), chain failure modes, hop fallback, forwarding detection, probe reporting — over real SSH |
+| **Total (standalone)** | **528** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
 
 Counts move as tests are added; `uv run pytest` is the authority. On a machine
 that has had the integrated install, run `uv sync --extra dev` first, or the

@@ -9,6 +9,7 @@ credential.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import threading
@@ -1823,14 +1824,56 @@ def _soften_console_encoding() -> None:
             pass
 
 
+class _StdoutGuard:
+    """``sys.stdout``, reporting a reader that went away as ``BrokenPipeError``.
+
+    A reader that stops early (``ac ops | Select-Object -First 3``) closes the
+    pipe. POSIX reports the next write as ``BrokenPipeError``; Windows reports
+    it as ``OSError`` errno 22, which looks like any other failure. Translating
+    at the stream pins the error to stdout, so an errno 22 from anywhere else is
+    still treated as a real fault.
+    """
+
+    def __init__(self, stream: Any) -> None:
+        self._stream = stream
+
+    def write(self, text: str) -> int:
+        try:
+            return self._stream.write(text)
+        except OSError as exc:
+            raise BrokenPipeError(exc.errno, "the reader of ac's output went away") from exc
+
+    def flush(self) -> None:
+        try:
+            self._stream.flush()
+        except OSError as exc:
+            raise BrokenPipeError(exc.errno, "the reader of ac's output went away") from exc
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._stream, name)
+
+
+def _quiet_stdout_after_broken_pipe() -> None:
+    """Point stdout at devnull so the interpreter's final flush cannot fail
+    again (the remedy the Python docs give for SIGPIPE)."""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, sys.__stdout__.fileno())
+
+
 def main() -> None:
     # Before anything can open a socket: otherwise Paramiko's logging falls
     # through to logging.lastResort and prints protocol chatter to stderr, in
     # the middle of whatever prompt is on screen.
     install_quiet_logging()
     _soften_console_encoding()
+    sys.stdout = _StdoutGuard(sys.stdout)
     try:
         app()
+    except BrokenPipeError:
+        # The reader stopped early. Nothing is wrong and nobody is listening,
+        # so no message: stderr is often the same closed pipe.
+        _quiet_stdout_after_broken_pipe()
+        raise SystemExit(1) from None
     except AccessControlError as exc:
         err.print(f"[bold red]error:[/bold red] {exc}")
         raise SystemExit(1) from exc
