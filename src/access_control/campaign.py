@@ -34,6 +34,7 @@ import yaml
 
 from .brief import TaskBrief, load_brief, validate_brief
 from .config import Catalog, Inventory
+from .credentials import caller_marker
 from .errors import ConfigError
 
 DEFAULT_MAX_PARALLEL = 8
@@ -331,6 +332,7 @@ def execute_brief_on_client(client: Any, brief: TaskBrief, *, confirm: bool) -> 
                 confirmed=confirm,
                 start_at=step.start_at,
                 only_steps=list(step.only_steps) or None,
+                **caller_marker(),
             )
         except Exception as exc:  # noqa: BLE001
             results.append({"operation": step.operation, "ok": False, "error": str(exc)})

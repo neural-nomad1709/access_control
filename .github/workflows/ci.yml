@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    name: test suite (${{ matrix.os }})
+    name: test suite (${{ matrix.mode.name }}, ${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -15,31 +15,24 @@ jobs:
         # CredUI); Linux covers the SSH/paramiko path and keeps CI honest
         # about accidental platform assumptions. The suite is fully offline.
         os: [ubuntu-latest, windows-latest]
+        # standalone: the plain install, with no AgentLighthouse anywhere — the
+        # tests that need it skip. integrated: the opt-in extra and test group,
+        # taken from the release tag pinned in pyproject.toml.
+        mode:
+          - name: standalone
+            flags: ""
+          - name: integrated
+            flags: "--extra lighthouse --group lighthouse-test"
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: access_control
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: access_control
-
-      # pyproject.toml takes the AgentLighthouse packages from a sibling clone
-      # (../AgentLighthouse). Pinned to the commit the suite was last verified
-      # against, so an AL change cannot break this build on its own; bump it
-      # deliberately.
-      - uses: actions/checkout@v4
-        with:
-          repository: neural-nomad1709/agentlighthouse
-          ref: 5ac5db9514e9de43775ddcf6ab79eae228dfdc97
-          path: AgentLighthouse
 
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
       - name: Install the project
-        run: uv sync --frozen
+        run: uv sync --frozen --extra dev ${{ matrix.mode.flags }}
 
       - name: Test suite
-        run: uv run pytest
+        run: uv run --frozen --extra dev ${{ matrix.mode.flags }} pytest

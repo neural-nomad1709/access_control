@@ -46,19 +46,20 @@ emitting the record twice.
 
 ## Canonical actions
 
-The sixteen names in `audit.ACTIONS`, used for filtering and correlation:
+The eighteen names in `audit.ACTIONS`, used for filtering and correlation:
 
 ```
 ROUTE_RESOLVE    SSH_CONNECT     WINRM_CONNECT   RDP_LAUNCH
-TUNNEL_OPEN      AUTHENTICATE    COMMAND_EXECUTE SCRIPT_EXECUTE
-FILE_UPLOAD      FILE_DOWNLOAD   LOG_COLLECT     PERMISSION_REQUEST
-COMMAND_BLOCKED  SESSION_START   SESSION_END     ERROR
+TUNNEL_OPEN      AUTHENTICATE    COMMAND_EXECUTE COMMAND
+PREFLIGHT        SCRIPT_EXECUTE  FILE_UPLOAD     FILE_DOWNLOAD
+LOG_COLLECT      PERMISSION_REQUEST COMMAND_BLOCKED SESSION_START
+SESSION_END      ERROR
 ```
 
-> Two action names are emitted that are **not** in that list: `PREFLIGHT` (from
-> `daemon.do_preflight`) and `COMMAND` (from the operator prompt). They behave
-> identically; the list is documentation, not an enum. Noted in
-> [../gap-analysis.md](../gap-analysis.md).
+`COMMAND` is a command the operator typed at the `ac connect` prompt;
+`COMMAND_EXECUTE` is one run through the session protocol. `PREFLIGHT` comes
+from `daemon.do_preflight`. `test_audit_actions.py` fails if the code emits a
+name that is missing here.
 
 ---
 
@@ -68,10 +69,11 @@ COMMAND_BLOCKED  SESSION_START   SESSION_END     ERROR
 
 | Event | Action | Emitted by | Key fields |
 |---|---|---|---|
-| `session.open` | `SESSION_START` | `Session.connect` | `route`, `hops[]` (id, role, source, address, channel, preestablished, context, domain), `allowed_operations[]`, `client_host`, `client_os`, `pid`, `detail` (= route) |
+| `session.open` | `SESSION_START` | `Session.connect` | `route`, `hops[]` (id, role, source, address, channel, preestablished, context, domain), `allowed_operations[]`, `exec_permitted`, `client_host`, `client_os`, `pid`, `detail` (= route) |
 | `session.degraded` | — | `Session._degrade_to_hop` | `held_at`, `reason`, `note` |
 | `session.recovered` | — | `Session.retry_target` | `host_id` |
-| `session.idle_timeout` | — | `SessionServer._watchdog` | `idle_s` |
+| `session.idle_timeout` | — | `SessionServer._watchdog` | `idle_s`, `lifetime_s` |
+| `session.lifetime_timeout` | — | `SessionServer._watchdog`, when `--max-lifetime` is reached | `idle_s`, `lifetime_s` |
 | `config.reload` | — | `SessionServer.do_reload` | `operations[]`, `added[]`, `removed[]`, `warnings[]` |
 | `session.close` | `SESSION_END` | `AuditLog.close` | `status`, `detail` (= status), plus the whole summary: `elapsed_s`, `records`, `steps_run`, `steps_ok`, `steps_failed`, `errors`, `blocked`, `log_file` |
 
@@ -93,6 +95,7 @@ COMMAND_BLOCKED  SESSION_START   SESSION_END     ERROR
 | `winrm.ntlm_provider` | — | same | `hop_id`, `provider` (resolved), `configured` |
 | `tunnel.open` | — | `Session._connect_winrm` | `hop_id` (the anchor), `target`, `local_port`, `purpose` |
 | `tunnel.open` | `TUNNEL_OPEN` | `Session.open_tunnel` | `source`, `target`, `detail`, `local_port`, `purpose` (`rdp:`/`shell:`/`manual:`/`winrm:`) |
+| `rdp.launch` | `RDP_LAUNCH` | `ac rdp`, via `daemon.do_rdp_launched` or its temporary session | `target` (node), `endpoint`, `username`, `credential_staged`, `detail` |
 | `tunnel.preestablished` | — | `Session._connect_winrm` | `hop_id`, `endpoint`, `note` |
 | `probe` | — | `probe._finish` | The entire probe report: `route`, `channel`, `nodes[]` with ports, verdicts and advice, `deep_result`, `blocked_at`, `forwarding_blocked_at`, `duration_s` |
 
@@ -101,7 +104,9 @@ COMMAND_BLOCKED  SESSION_START   SESSION_END     ERROR
 | Event | Action | Emitted by | Key fields |
 |---|---|---|---|
 | `preflight` | `PREFLIGHT` | `SessionServer.do_preflight` | `detail` (`N check(s), M blocker(s)`), `checks[]` (name, passed, detail, severity, duration_s, remedy) |
-| `permission` | `PERMISSION_REQUEST` | `Engine._check_permission` | `operation_id`, `gated`, `confirmed`, `granted`. `result: BLOCKED` when refused |
+| `permission` | `PERMISSION_REQUEST` | `Engine._check_permission` | `operation_id`, `gated`, `confirmed`, `granted`. `result: BLOCKED` when refused. For an agent's request: `request_id`, and `result: PENDING` while held, `SUCCESS` once approved, `BLOCKED` when denied or lapsed |
+| `approval.resolved` | — | `operator_shell._resolve_approval` | `request_id`, `decision` (`allow` \| `deny`), `resolved_by` |
+| `session.tainted` | — | `Engine._scan_text`, integrated mode only | `findings[]`, `detail`. Hostile content in collected output; every operation gates from then on |
 | `operation.start` | — | `Engine.run_operation` | `operation_id`, `params{}`, `confirmed`, `dry_run`, `steps[]` |
 | `step.start` | — | `Engine.run_step` | `operation_id`, `step_id`, `desc`, `shell`, `command` (redacted), `dry_run` |
 | `step.end` | `SCRIPT_EXECUTE` | `Engine.run_step` | `operation_id`, `step_id`, `ok`, `exit_code`, `duration_s`, `expectation_reason`, `stdout_chars`, `collected`, `hint`, `detail` (`op/step`) |

@@ -38,16 +38,16 @@ class ApprovableGatekeeper:
 class ShellSession:
     """The slice of Session the :approve verb touches."""
 
-    def __init__(self, gatekeeper: Any, *, agent_attached: bool = False) -> None:
+    def __init__(self, gatekeeper: Any, *, agent_held_prompt: bool = False) -> None:
         self.gatekeeper = gatekeeper
-        self.agent_attached = agent_attached
+        self.agent_held_prompt = agent_held_prompt
         self.audit = None
 
 
-def make_shell(gatekeeper: Any, *, agent_attached: bool = False):
+def make_shell(gatekeeper: Any, *, agent_held_prompt: bool = False):
     out, err = io.StringIO(), io.StringIO()
     shell = OperatorShell(
-        ShellSession(gatekeeper, agent_attached=agent_attached),
+        ShellSession(gatekeeper, agent_held_prompt=agent_held_prompt),
         Console(file=out, force_terminal=False, width=120),
         Console(file=err, force_terminal=False, width=120),
     )
@@ -91,9 +91,10 @@ class TestApproveVerb:
 
     def test_an_agent_driven_shell_cannot_resolve_approvals(self) -> None:
         """R-01 through the side door: an agent holding the prompt on its own
-        session must not resolve the request its own gated run filed."""
+        session must not resolve the request its own gated run filed. The
+        prompt is agent-held when `ac connect` was started inside a harness."""
         gk = ApprovableGatekeeper()
-        shell, _, err = make_shell(gk, agent_attached=True)
+        shell, _, err = make_shell(gk, agent_held_prompt=True)
         shell._meta("approve hitl_abc123")
         assert gk.resolutions == []
         assert "agent" in err.getvalue().lower()

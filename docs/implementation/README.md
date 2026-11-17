@@ -30,7 +30,9 @@ src/access_control/
   credentials.py    Prompting. Never stores. Terminal or Windows dialog.
   safety.py         Command deny-list. BLOCKED / CONFIRM / ALLOWED.
   audit.py          Append-only JSONL trail, canonical actions, timeline, summary.
-  logging_setup.py  Library logging -> a file; unexpected tracebacks -> errors.log.
+  logging_setup.py  Library logging -> transport.log (level, size-bounded); tracebacks -> errors.log.
+  gatekeeper.py     Governance seam: LocalGatekeeper holds agent approvals;
+                    LighthouseGatekeeper is the optional AgentLighthouse plane.
   probe.py          Live capability detection per hop.
   preflight.py      Liveness, chain, round trip, IDENTITY, and brief-declared checks.
   session.py        One authenticated path: hops, tunnels, channels. Owns teardown.
@@ -38,7 +40,8 @@ src/access_control/
   brief.py          Task-brief parsing and offline validation.
   campaign.py       Fan-out of one brief across many hosts' live sessions.
   daemon.py         Holds a session in a process; loopback JSON protocol.
-  operator_shell.py The REPL inside the `ac connect` window.
+  operator_shell.py The REPL inside the `ac connect` window, including :approve.
+  mcp_server.py     `ac mcp`: seven agent-facing MCP tools over a live session.
   cli.py            typer front end.
   transport/
     base.py         ExecResult + the Channel protocol.
@@ -58,7 +61,8 @@ cli → daemon → engine → session → transport → route → config → rou
 
 Nothing in `transport` imports `engine`, and `routegraph` imports nothing but
 `context` and `errors` — which is why route resolution is testable with no
-fixtures at all.
+fixtures at all. `gatekeeper` imports nothing from the package; `daemon`
+constructs one and the session carries it to the engine.
 
 ---
 
@@ -133,6 +137,24 @@ Renders, polices, runs, judges, collects. Returns `OperationOutcome` /
 
 `_write_report` never raises: losing the report must not turn a recoverable
 failure into an exception.
+
+**Who is asking matters.** A request is an agent's when the session is
+agent-attached or the client sent `agent_caller`. For an agent, `confirmed`
+carries no weight: `_check_permission` files the rendered commands with the
+gatekeeper and refuses until the request is approved, and an operation that is
+not marked gated but contains a confirm-class step is held as a whole. A human's
+`confirmed` works as it always has.
+
+### `gatekeeper` — approvals and governance
+
+One protocol, three implementations. `LocalGatekeeper` is what `build_session`
+gives every session: it holds an agent's approval request in memory, keyed by
+session, tool and the hash of the rendered commands, until the operator resolves
+it at the prompt; one approval covers one run, and an unanswered request lapses
+into a denial. `NullGatekeeper` (an engine with no gatekeeper) answers
+`not_governed`, so gated agent work cannot run at all. `LighthouseGatekeeper`
+needs the `[lighthouse]` extra. Changing approval semantics means changing both
+`LocalGatekeeper` and `LighthouseGatekeeper`, and `tests/test_local_approvals.py`.
 
 ### `preflight` — checks, in a deliberate order
 
@@ -282,7 +304,10 @@ it resolve?) and `ac probe <host>` (does that port actually answer?).
 Add the name to `audit.ACTIONS` and call `audit.action(...)` with `source`,
 `target` and `result`. Anything that reaches an operator's machines should be an
 action, not a bare `emit` — actions are what `ac timeline` and SIEM filters see.
-Then document it in [audit-events.md](audit-events.md).
+Add its receipt mapping to `gatekeeper._RECEIPT_ACTIONS`, then document it in
+[audit-events.md](audit-events.md). `test_audit_actions.py` fails if an emitted
+name is missing from `ACTIONS`, and the integrated suite fails if one has no
+receipt mapping.
 
 ### A new execution channel
 

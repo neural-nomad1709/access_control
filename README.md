@@ -40,7 +40,7 @@ This tool is the careful version:
 - **capability is catalogued** — an agent can run nothing that is not in a
   reviewed YAML file, bound to specific hosts;
 - **destructive actions are gated** — they refuse to run until an operator
-  approves the fully rendered command;
+  approves the fully rendered command, and an agent cannot approve its own;
 - **everything is audited** — one JSON record per action, fsynced, SIEM-ready;
 - **failures come back diagnosed** — the nominated logs, the exit code and a
   human-written hint, which is what makes "read the logs and fix it" tractable.
@@ -58,6 +58,7 @@ This tool is the careful version:
 | **Campaigns** | One reviewed brief fanned out across many hosts' live sessions |
 | **Preflight, including identity** | Proves you are on the machine you think you are — the failure a port forward makes silent |
 | **Command deny-list** | Catastrophic commands refused outright; state-changing ones require confirmation |
+| **Operator approval** | An agent's gated request is held until you type `:approve <id>` in the `ac connect` window; its `--confirm` carries no weight |
 | **Audit trail and timeline** | Per-run agent and session ids, canonical action records, and a readable summary per session and per operation |
 | **Interactive handoff** | `ac rdp`, `ac shell`, `ac tunnel` — for the jobs a human should do |
 
@@ -241,21 +242,25 @@ Running it in production — monitoring, backup, maintenance and upgrades — is
 | [docs/CLAUDE_PRODUCTION_GUARDRAILS.md](docs/CLAUDE_PRODUCTION_GUARDRAILS.md) | Deploying Claude against a live production session |
 | [docs/guides/features.md](docs/guides/features.md) | Every feature, and how it compares to plink, Ansible, mRemoteNG, Teleport and PAM tools |
 | [docs/implementation/](docs/implementation/README.md) | Module contracts, CLI reference, audit events, wire protocol |
-| [docs/integration/](docs/integration/) | Optional AgentLighthouse governance integration — per-phase reports, MCP proxy and SIEM guides |
+| [docs/integration/README.md](docs/integration/README.md) | **Integrated with AgentLighthouse:** its own commands, the MCP proxy, the plan, the history |
 | [docs/guides/testing.md](docs/guides/testing.md) | Test strategy and the two end-to-end loops |
-| [BugFixNchange.md](BugFixNchange.md) | What is fixed or open |
+| [BugFixNchange.md](BugFixNchange.md) | Release notes, what is fixed, and what is open |
 
-### Optional: AgentLighthouse governance
+### Standalone, or integrated with AgentLighthouse
 
-A plain install is fully standalone and behaves exactly as this README
-describes. With the optional `access-control[lighthouse]` extra, the tool can
-run behind [AgentLighthouse](https://github.com/neural-nomad1709/agentlighthouse)
-as its governance plane: out-of-band human approval that a flag cannot satisfy,
-identity-bound default-deny tool policy, output scanning with taint escalation,
-and a signed, hash-chained receipt ledger verifiable offline with `al-verify`.
-The seam is a single `Gatekeeper` interface whose default (`NullGatekeeper`)
-changes nothing; the integration is opt-in and documented in
-[docs/integration/](docs/integration/).
+This README, and everything in `docs/` outside `docs/integration/`, describes
+the **standalone product**. It needs no AgentLighthouse install or checkout, and
+every command shown here is a standalone command.
+
+Optionally, the tool can run integrated with
+[AgentLighthouse](https://github.com/neural-nomad1709/agentlighthouse) as its
+governance plane: identity-bound default-deny tool policy, output scanning with
+taint escalation, approvals from a control plane as well as the operator
+prompt, and a signed, hash-chained receipt ledger verifiable offline with
+`al-verify`.
+The integrated mode has its own install, run and test commands, its current
+state and its plan in
+**[docs/integration/README.md](docs/integration/README.md)**.
 
 **Deciding whether this is the right tool?** Start with
 [docs/guides/features.md](docs/guides/features.md). It is candid about where
@@ -302,6 +307,11 @@ uv run ac connect win-target02
 uv run ac verify  win-target02 --expect-hostname WIN-TARGET02
 uv run ac brief run config\briefs\example-windows-install.yaml --confirm
 ```
+
+When an agent runs the brief instead of you, open the session with
+`--agent-id`. Its `--confirm` then carries no weight: each gated step is held,
+the `ac connect` window prints `approval requested: apr-…` with the commands,
+and you answer with `:approve apr-…` there.
 
 Validation catches a wrong host, an unknown operation, a misspelled parameter, a
 missing rollback block, or a brief that contradicts its own rules — before anyone
@@ -412,12 +422,15 @@ must not be uploaded.
 - **Before production**, work through
   [docs/SECURITY.md](docs/SECURITY.md#10-production-hardening-checklist) —
   `AC_HOST_KEY_POLICY=strict`, `environment` set on every node, a bounded idle
-  timeout, and `AC_ALLOW_ENV_CREDENTIALS` unset everywhere.
+  timeout and `--max-lifetime`, and `AC_ALLOW_ENV_CREDENTIALS` unset everywhere.
 
 ## Safety
 
 - Operations marked `requires_permission` or `destructive` refuse to run without
-  an explicit confirmation, forcing the agent to ask you first.
+  your approval. An agent's request is held until you type `:approve <id>` at
+  the `ac connect` prompt; the agent's own `--confirm` does not count.
+- `ac connect --ops` limits a session to named operations and also refuses
+  ad-hoc `ac exec` unless you add `--allow-exec`.
 - A deny-list blocks catastrophic commands (`Format-Volume`, `rm -rf /`,
   unconfirmed `Restart-Computer`) before execution.
 - `--dry-run` renders the exact commands and connects to nothing.
@@ -440,7 +453,8 @@ The five you are most likely to hit:
 
 **Do I have to keep a terminal open?**
 Yes, for the life of the session. It is the direct consequence of never storing a
-credential, and it is the intended trade. `--idle-timeout` bounds it.
+credential, and it is the intended trade. `--idle-timeout` and `--max-lifetime`
+bound it.
 
 **Can it run unattended, at 03:00, with nobody watching?**
 No. That needs stored credentials, which this design does not have. Use a PAM

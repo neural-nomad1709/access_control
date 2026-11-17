@@ -39,7 +39,7 @@ agent ──stdio JSON-RPC──▶ al mcp proxy ──stdio──▶ uv run ac 
    ```
 
    `--agent-id` pins the SPIFFE identity the policy names; `--ops` scopes the
-   catalogue. The session marks itself agent-attached, so gated work resolves
+   catalogue and refuses `ac_run_command` (add `--allow-exec` to permit it). The session marks itself agent-attached, so gated work resolves
    out of band (P2), never via a flag.
 
 2. A tool policy for that identity, named for the **MCP tools** the proxy sees
@@ -50,11 +50,18 @@ agent ──stdio JSON-RPC──▶ al mcp proxy ──stdio──▶ uv run ac 
    `policy.tool_policy_path`, so `config/al-mcp-proxy.yaml` wires the two
    together.
 
+3. The integrated install, which is what provides the `al` command (see
+   [README.md](README.md#2-commands)):
+
+   ```
+   uv sync --extra dev --extra lighthouse --group lighthouse-test
+   ```
+
 ## Launch
 
 ```
 export AL_ADMIN_API_TOKEN=…    # the proxy's Runtime needs it; never in a file
-al mcp proxy \
+uv run --extra lighthouse al mcp proxy \
     --actor spiffe://access-control/agent/claude-j-doe-inc0001234 \
     --session prod-app01 \
     --config config/al-mcp-proxy.yaml \
@@ -77,10 +84,12 @@ verifiable offline with `al-verify`.
   receipts use: `spiffe://access-control/agent/<agent-id>`, lowercased and
   sanitized to `[a-z0-9._-]` (see `gatekeeper.spiffe_actor`). Keep the policy
   file, the `--actor`, and `--agent-id` consistent, or the identity denies.
-- **Two planes, one workload.** `ac mcp` runs a `NullGatekeeper` by default (it
-  only wraps the socket); the governance decisions are the proxy's job. Running
-  ac *itself* under a `LighthouseGatekeeper` as well (Phases 1–2) is the
-  belt-and-braces posture: mediation at the door, enforcement at the engine.
-- **Read-only first.** The Phase 3 acceptance target is a read-only catalogued
-  operation end to end. Grant write operations in the policy only once the
-  approval flow is exercised for that identity.
+- **Two planes, one workload.** `ac mcp` only wraps the socket; the session it
+  attaches to keeps its own gatekeeper (`LocalGatekeeper` from `ac connect`,
+  which holds gated work for the operator's `:approve`). Policy, scanning and
+  receipts are the proxy's job. Running ac *itself* under a
+  `LighthouseGatekeeper` as well is the belt-and-braces posture: mediation at
+  the door, enforcement at the engine.
+- **Read-only first.** Start with a read-only catalogued operation end to end.
+  Grant write operations in the policy only once the approval flow is exercised
+  for that identity.

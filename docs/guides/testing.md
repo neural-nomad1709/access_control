@@ -18,16 +18,34 @@ against a mock.
 |---|---:|---|
 | `test_config.py` | 44 | Inventory and catalog parsing, `via:` compilation, validation, host_id/tag binding, variable resolution |
 | `test_route.py` | 14 | Every route shape and every rejected topology |
-| `test_routegraph.py` | 64 | Declared edges, resolution, mandatory ports, pre-established tunnels, environment boundaries, domain qualifying, agent identity, logging config |
+| `test_routegraph.py` | 65 | Declared edges, resolution, mandatory ports, pre-established tunnels, environment boundaries, domain qualifying, agent identity, logging config |
 | `test_security.py` | 65 | Redaction, the command deny-list, credential handling |
-| `test_engine.py` | 58 | Templating, exit-code parsing, expectations, gating, dry run, failure diagnosis, the operation report, canonical actions, timeline |
-| `test_daemon.py` | 19 | Session descriptors and the loopback protocol, over real sockets |
-| `test_brief.py` | 47 | Task brief parsing and validation, preflight checks, host-identity matching, check ordering |
+| `test_engine.py` | 60 | Templating, exit-code parsing, expectations, gating, dry run, failure diagnosis, the operation report, canonical actions, timeline |
+| `test_daemon.py` | 22 | Session descriptors and the loopback protocol, over real sockets |
+| `test_exec_scope.py` | 16 | `--ops` refuses `ac exec` unless `--allow-exec`, at the session, engine, daemon and CLI; `ac logs` paths cannot inject a command |
+| `test_audit_actions.py` | 2 | Every action name the code emits is listed in `audit.ACTIONS` |
+| `test_session_lifetime.py` | 10 | The absolute session lifetime (`--max-lifetime`) alongside the idle timeout |
+| `test_brief.py` | 51 | Task brief parsing and validation, preflight checks, host-identity matching, check ordering |
+| `test_cli_brief_postcheck.py` | 4 | A brief's `postcheck:` block actually runs |
 | `test_campaign.py` | 11 | Campaign parsing, offline planning and retargeting, concurrent dispatch with a fake client, skip-on-no-session, per-target isolation |
+| `test_cli_tunnel.py` | 4 | `ac tunnel --port` reaches the transport, attached and ephemeral |
+| `test_cli_interactive_leg.py` | 11 | `ac shell` / `ac rdp` dial the route leg's address and use a pre-established forward as it is; `ac rdp` records `RDP_LAUNCH` |
+| `test_cli_brief_duration.py` | 4 | `rules.max_duration_minutes` stops a brief from starting further operations |
+| `test_logging_setup.py` | 9 | `logging.level` sets `transport.log` verbosity; `transport.log` and `errors.log` roll over by size |
+| `test_cli_output_encoding.py` | 2 | Remote output cannot abort the CLI on a cp1252 console |
+| `test_mcp_server.py` | 18 | `ac mcp`: the tool surface is a 1:1 wrapper, operator-only methods absent, `confirmed` stripped |
+| `test_agent_permission_policy.py` | 4 | `.claude/settings.json` matches the agent permission policy in CLAUDE_PRODUCTION_GUARDRAILS.md §8.2 |
+| `test_gatekeeper.py` | 14 | The `Gatekeeper` seam: `NullGatekeeper` changes nothing, the session owns the gatekeeper |
+| `test_engine_governed.py` | 20 | The engine's authorization, approval and output-scan call sites, driven by a scripted gatekeeper |
+| `test_operator_shell_approve.py` | 7 | The `:approve` verb at the operator prompt |
+| `test_local_approvals.py` | 32 | An agent's gated request is held until the operator approves: the local approval store, the engine, the session socket, the prompt, and clients declaring an agent caller |
+| `test_packaging_independence.py` | 9 | The standalone install names no AgentLighthouse package and no source outside the repo |
 | `test_e2e.py` | 18 | Two full cycles, the agent path, chain failure modes, hop fallback, forwarding detection, probe reporting — over real SSH |
-| **Total** | **340** | |
+| **Total (standalone)** | **516** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
 
-Counts move as tests are added; `uv run pytest` is the authority.
+Counts move as tests are added; `uv run pytest` is the authority. On a machine
+that has had the integrated install, run `uv sync --extra dev` first, or the
+integration tests run too.
 
 ## Why the SSH server is real
 
@@ -251,10 +269,12 @@ coverage:
 | Gap | Consequence |
 |---|---|
 | No WinRM/PSRP server double | `transport/winrm.py`, the nested leg, NTLM provider selection and wedge recovery are exercised only at unit level |
-| No CI pipeline in the repository | The suite runs when someone remembers. There is no `.github/workflows`, no pre-commit hook, and no coverage gate |
 | No coverage threshold enforced | `--cov` is available but nothing fails on a drop |
 | No linter or type checker configured | No ruff/mypy config, despite the code being fully annotated |
-| No RDP path test | `transport/interactive.py` is Windows-only and launches a GUI |
-| `postcheck:` in a brief | Parsed but never executed, so there is nothing to test |
+| No test launches `mstsc` | `transport/interactive.py` is Windows-only and opens a GUI; the CLI around it is tested up to that boundary |
+| One test can fail by chance | `test_same_second_runs_get_distinct_trace_ids`: 50 ids with a 6-hex suffix collide about once in 14 000 runs |
 
-These are tracked in [../gap-analysis.md](../gap-analysis.md).
+CI (`.github/workflows/ci.yml`) runs the suite on Ubuntu and Windows, in both
+the standalone and the integrated mode, on every push to `main` and every pull
+request. These gaps are tracked in
+[../../BugFixNchange.md](../../BugFixNchange.md#3-open).

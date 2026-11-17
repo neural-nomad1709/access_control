@@ -126,18 +126,25 @@ means adding `do_<name>` to `SessionServer` — the dispatcher finds it.
 | `operations` | — | The operations this session may run | agents |
 | `reload` | — | `{host_id, operations[], added[], removed[], warnings[], route}` | `ac reload` |
 | `preview` | `operation_id`, `params` | The rendered preview | agents |
-| `run_operation` | `operation_id`, `params`, `confirmed`, `dry_run`, `only_steps`, `start_at` | `OperationOutcome.to_dict()` | `ac run`, `ac brief run`, campaigns |
-| `run_command` | `command`, `shell`, `confirmed`, `timeout_s` | `ExecResult.to_dict()` | `ac exec` |
+| `run_operation` | `operation_id`, `params`, `confirmed`, `dry_run`, `only_steps`, `start_at`, `agent_caller` | `OperationOutcome.to_dict()` | `ac run`, `ac brief run`, campaigns |
+| `run_command` | `command`, `shell`, `confirmed`, `timeout_s`, `agent_caller` | `ExecResult.to_dict()` | `ac exec` |
 | `fetch_log` | `path`, `tail` | `ExecResult.to_dict()` | `ac logs` |
 | `upload` | `local_path`, `remote_path` | `{uploaded}` | `ac upload` |
 | `download` | `remote_path`, `local_path` | `{downloaded}` | `ac download` |
 | `open_tunnel` | `dest_host`, `dest_port`, `purpose`, `local_port` | `{tunnel_id, local_host, local_port, dest}` | `ac rdp`, `ac shell`, `ac tunnel` |
 | `close_tunnel` | `tunnel_id` | `{closed}` | same |
 | `credentials_for` | `node_id` | `{node_id, username}` | `ac rdp` (pre-fills the username) |
+| `rdp_launched` | `node_id`, `endpoint`, `username`, `staged` | `{recorded}` | `ac rdp` (records `RDP_LAUNCH` in this session's trail) |
 | `close` | `status` | The final status, with `closing: true` | `ac disconnect` |
 
 **`credentials_for` returns a username only. Passwords never cross this socket.**
 There is no method that returns a secret.
+
+**`agent_caller`** is sent as `true` by a CLI client that finds itself running
+inside an agent harness. It can only make the session stricter: the request is
+handled as an agent's, so `confirmed` is ignored and gated work is held for the
+operator's `:approve`. There is no method that resolves an approval; that
+happens only at the `ac connect` prompt.
 
 ### The MCP face
 
@@ -146,7 +153,7 @@ subset of these methods as MCP tools, for running behind AgentLighthouse's
 proxy — see [../integration/mcp-proxy-config.md](../integration/mcp-proxy-config.md).
 It is a 1:1 wrapper: `ac_status`, `ac_preflight`, `ac_operations`, `ac_preview`,
 `ac_run_operation`, `ac_run_command`, `ac_fetch_log`. Tunnels,
-`credentials_for`, `close` and `reload` are **not** exposed — interactive
+`credentials_for`, `rdp_launched`, `close` and `reload` are **not** exposed — interactive
 handoff and session lifecycle stay with the human operator — and `confirmed` is
 stripped from every call, so an agent cannot self-approve through this surface.
 
@@ -167,7 +174,7 @@ idle timer.
   "current_node": "win-app01", "current_address": "corp\\svc_deploy@win-app01.corp.net",
   "connected": true, "closed": false, "connected_at": 1755000926.8,
   "idle_s": 4.2, "idle_timeout_s": 1800, "expires_in_s": 1796,
-  "allowed_operations": ["install-package"],
+  "allowed_operations": ["install-package"], "exec_permitted": false,
   "authenticated_nodes": ["bastion1", "jump1", "win-app01"],
   "tunnels": [{"local": "127.0.0.1:53001", "to": "10.20.4.11:5985", "active": true}]
 }

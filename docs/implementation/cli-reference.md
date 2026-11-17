@@ -80,7 +80,7 @@ Read-only. The credential store is cleared when it finishes.
 
 ## Sessions
 
-### `ac connect <host> [--ops a,b] [--idle-timeout N] [--no-shell] [--no-fallback]`
+### `ac connect <host> [--ops a,b] [--allow-exec] [--idle-timeout N] [--max-lifetime N] [--no-shell] [--no-fallback] [--agent-id ID]`
 
 **Run this in your own terminal.** It is the only place a password prompt can
 appear. Prompts once per hop, then holds the authenticated path open, serves it
@@ -88,10 +88,13 @@ on a loopback socket, and gives you a prompt on the host.
 
 | Flag | Default | Effect |
 |---|---|---|
-| `--ops a,b` | all permitted for the host | Restrict this session to these operations. The session then refuses anything else even if `operations.yaml` is edited underneath it |
+| `--ops a,b` | all permitted for the host | Restrict this session to these operations. The session then refuses anything else even if `operations.yaml` is edited underneath it, and refuses ad-hoc commands (`ac exec`) too |
+| `--allow-exec` | off | With `--ops`, still permit `ac exec`. No effect without `--ops` |
 | `--idle-timeout N` | `1800` | Seconds of inactivity before the session closes and credentials are wiped. `0` = never |
+| `--max-lifetime N` | `0` | Absolute seconds before the session closes regardless of activity, measured from connect. Bounds a continuously driven session the idle timer alone would keep open. `0` = no ceiling |
 | `--no-shell` | off | Hold the session open with no prompt — for a service wrapper, or a log you want kept clean. Close with Ctrl-C |
 | `--no-fallback` | off | Fail outright if the target leg fails, instead of holding the session at the last hop that authenticated |
+| `--agent-id ID` | generated per run | Agent id recorded on every audit line for this session, e.g. a per-window name (`AGT-web01`) or a batch tag. Overrides `AC_AGENT_ID`. Either one marks the session as agent-driven: `--confirm` then carries no weight and gated work waits for `:approve` |
 
 Refuses to start if a session for that host already exists. Warns if this is not
 an interactive terminal.
@@ -121,7 +124,21 @@ operator@bastion-staging.example.net [bastion-staging · FALLBACK] $
 | `:route` | The full hop chain verbatim from the inventory |
 | `:retry` | Re-attempt the target leg (only meaningful when degraded) |
 | `:timeout <secs>` | Per-command timeout (default 300) |
+| `:approve` | List the approvals an agent is waiting on, with the exact commands each would run |
+| `:approve <id>` | Approve one. It authorizes one run of exactly those commands |
+| `:deny <id>` | Refuse one |
 | `:exit`, `:quit` | Close the session and wipe credentials |
+
+**Approving an agent's gated work.** When an agent asks for a gated operation or
+a `CONFIRM`-class command, nothing runs. The request is held, this window prints
+`approval requested: apr-…` with the commands, and the agent is told to re-run
+once you have answered. A request you ignore lapses after 15 minutes and counts
+as a denial. A request is the agent's when the session was opened with
+`--agent-id` (or `AC_AGENT_ID`), or when the `ac run` / `ac exec` /
+`ac brief run` / `ac campaign run` command was itself started inside an agent
+harness such as Claude Code. Your own `ac run --confirm` from a plain terminal
+is not held. If `ac connect` itself was started inside an agent harness, its
+prompt cannot approve anything: open the session from your own terminal.
 
 Anything else runs on that machine through the same audited channel, with the
 same deny-list — `CONFIRM`-class commands are allowed (a human typed them), but
@@ -197,7 +214,7 @@ Runs an operation on a host.
 | Flag | Effect |
 |---|---|
 | `-p`, `--param name=value` | Repeatable. Values are strings |
-| `--confirm` | Approves a gated (or destructive) operation. Without it, a gated operation is refused **and the refusal quotes the fully rendered commands** |
+| `--confirm` | Approves a gated (or destructive) operation. Without it, a gated operation is refused **and the refusal quotes the fully rendered commands**. From an agent it carries no weight: the operation is held for `:approve` at the operator prompt instead |
 | `--dry-run` | Renders and reports policy, executes nothing. **Works with no live session** |
 | `--only a,b` | Run only these step ids |
 | `--start-at id` | Resume from this step onward — use after fixing a failure rather than re-running from the top |
@@ -223,13 +240,19 @@ warning / verbose streams separately.
 > On Windows, wrap the remote script in **single quotes** so your local PowerShell
 > does not expand `$env:` before the command is sent.
 
-`ac exec` is **not** restricted by `ac connect --ops` — that allow-list covers
-catalogue operations. The deny-list still applies.
+A session opened with `ac connect --ops` refuses `ac exec` (exit 1, audited as
+`COMMAND_BLOCKED`) unless it was also opened with `--allow-exec`. The deny-list
+applies either way. Commands typed at the `ac connect` prompt are the
+operator's own and are not affected.
 
 ### `ac logs <host> --path <file-or-glob> [--tail N] [--json]`
 
 Tails a remote log. A glob resolves to the **most recently written** match, which
 is how you find an installer log with a generated name. `--tail` defaults to 200.
+
+Works in a session restricted with `--ops`. The path is passed to the remote
+shell as one literal argument (glob characters still expand), so it cannot carry
+a second command.
 
 ### `ac upload <host> <local> <remote>`
 
@@ -312,6 +335,15 @@ hop or a host. Refused if the node is not configured for RDP.
 If a session is live it borrows that session's tunnel and pre-fills the username
 from it; otherwise it opens a temporary session just to carry the forward.
 
+The destination is the address the route declares for RDP (the leg's
+`interactive:` endpoint), not the node's own `hostname:`. If that endpoint is
+`preestablished: true`, `mstsc` is pointed straight at it: no tunnel is built and
+no hop is authenticated. If only another protocol was forwarded (say WinRM), the
+command is refused, because another port on `localhost` is your own machine.
+
+Every launch is recorded as `RDP_LAUNCH`: in the live session's trail, or in a
+trail of its own when there is no session.
+
 `--stage-credentials` pre-fills the password via `cmdkey` instead of letting
 `mstsc` prompt. **Off by default** — letting Windows prompt keeps the password out
 of any process list. The staged credential and the generated `.rdp` file are
@@ -327,17 +359,41 @@ handles raw mode, resizing and Ctrl-C correctly on Windows). Host-key checking i
 disabled for the *loopback endpoint only* — the forward already terminates on a
 bastion whose key was verified.
 
+The destination is the address the route declares for SSH. If it is
+`preestablished: true`, `ssh` is pointed straight at that forward and nothing is
+tunnelled.
+
 ### `ac tunnel <node> [--port N] [--remote-port N]`
 
 Holds a port forward open through the same authenticated chain, for any client:
 `mstsc`, mRemoteNG, a database tool, a browser. Prints the local endpoint and the
 exact `mstsc` / `ssh` commands to use it. Ctrl-C closes it.
 
-`--port 0` (default) picks a free port; a requested port that is unavailable
-falls back with a note. `--remote-port` overrides the node's declared port.
+`--port 0` (default) picks a free port; a requested port that is unavailable is
+an error, never a silent substitute. `--remote-port` overrides the node's
+declared port.
 
 Refused for a node declared `preestablished: true` — there is nothing for this
 command to build.
+
+---
+
+## Agent access
+
+### `ac mcp <host>`
+
+Serves the live session for `<host>` as an MCP server on stdio. Needs a session
+already open with `ac connect`; it attaches to it and opens nothing itself.
+
+The tools are a 1:1 wrapper of the agent-facing daemon methods: `ac_status`,
+`ac_preflight`, `ac_operations`, `ac_preview`, `ac_run_operation`,
+`ac_run_command`, `ac_fetch_log`. Tunnels, credentials and session lifecycle are
+not exposed, and `confirmed` is stripped from every call, so an agent cannot
+self-approve a gated operation through it. Details:
+[session-protocol.md](session-protocol.md#the-mcp-face).
+
+It is designed to run behind AgentLighthouse's MCP proxy, which is part of the
+integrated mode: [../integration/mcp-proxy-config.md](../integration/mcp-proxy-config.md).
 
 ---
 

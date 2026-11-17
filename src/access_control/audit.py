@@ -56,6 +56,8 @@ ACTIONS = (
     "TUNNEL_OPEN",
     "AUTHENTICATE",
     "COMMAND_EXECUTE",
+    "COMMAND",
+    "PREFLIGHT",
     "SCRIPT_EXECUTE",
     "FILE_UPLOAD",
     "FILE_DOWNLOAD",
@@ -71,6 +73,25 @@ RESULT_SUCCESS = "SUCCESS"
 RESULT_FAILURE = "FAILURE"
 RESULT_BLOCKED = "BLOCKED"
 RESULT_PENDING = "PENDING"
+
+
+def record_rdp_launch(
+    audit: Any, node_id: str, endpoint: str, username: str | None, staged: bool
+) -> None:
+    """The interactive session itself, which its tunnel record does not show.
+
+    Shared by the daemon (a live session) and ``ac rdp``'s temporary session so
+    both trails carry the same record.
+    """
+    audit.action(
+        "RDP_LAUNCH",
+        event=EV_RDP,
+        target=node_id,
+        detail=f"mstsc -> {endpoint}",
+        endpoint=endpoint,
+        username=username,
+        credential_staged=staged,
+    )
 
 
 def new_session_id() -> str:

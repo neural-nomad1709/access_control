@@ -33,13 +33,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .audit import AuditLog
+from .audit import AuditLog, record_rdp_launch
 from .config import Catalog, Inventory, load_all
 from .context import AgentIdentity
-from .credentials import CredentialStore, select_prompter
-from .engine import Engine, tail_command
+from .credentials import CredentialStore, select_prompter, under_agent_harness
+from .engine import Engine
 from .errors import AccessControlError, SessionError
-from .gatekeeper import Gatekeeper
+from .gatekeeper import Gatekeeper, LocalGatekeeper
+from .logging_setup import set_library_log_level
 from .paths import ensure_dir, session_dir
 from .preflight import run_preflight
 from .route import plan_route
@@ -472,6 +473,7 @@ class SessionServer:
         dry_run: bool = False,
         only_steps: list[str] | None = None,
         start_at: str | None = None,
+        agent_caller: bool = False,
     ) -> dict[str, Any]:
         self.session.touch()
         outcome = self.engine.run_operation(
@@ -481,6 +483,7 @@ class SessionServer:
             dry_run=dry_run,
             only_steps=only_steps,
             start_at=start_at,
+            agent_caller=bool(agent_caller),
         )
         return outcome.to_dict()
 
@@ -490,17 +493,18 @@ class SessionServer:
         shell: str | None = None,
         confirmed: bool = False,
         timeout_s: int = 300,
+        agent_caller: bool = False,
     ) -> dict[str, Any]:
         self.session.touch()
         return self.engine.run_command(
-            command, shell=shell, confirmed=confirmed, timeout_s=timeout_s
+            command, shell=shell, confirmed=confirmed, timeout_s=timeout_s,
+            agent_caller=bool(agent_caller),
         ).to_dict()
 
     def do_fetch_log(self, path: str, tail: int = 200) -> dict[str, Any]:
         """Read the tail of a remote log without needing a whole operation."""
         self.session.touch()
-        command = tail_command(path, int(tail), windows=self.session.host.is_windows)
-        return self.engine.run_command(command, timeout_s=180).to_dict()
+        return self.engine.fetch_log(path, int(tail)).to_dict()
 
     def do_upload(self, local_path: str, remote_path: str) -> dict[str, Any]:
         self.session.touch()
@@ -555,6 +559,14 @@ class SessionServer:
             tunnel.stop()
         return {"closed": tunnel_id}
 
+    def do_rdp_launched(
+        self, node_id: str, endpoint: str, username: str | None = None, staged: bool = False
+    ) -> dict[str, Any]:
+        """``ac rdp`` reports the mstsc launch so this session's trail records it."""
+        if self.session.audit:
+            record_rdp_launch(self.session.audit, node_id, endpoint, username, bool(staged))
+        return {"recorded": bool(self.session.audit)}
+
     def do_credentials_for(self, node_id: str) -> dict[str, Any]:
         """Username only.  Passwords never cross this socket.
 
@@ -596,12 +608,47 @@ class SessionServer:
 # --------------------------------------------------------------------------
 
 
+def build_audit(
+    inventory: Inventory,
+    host_id: str,
+    *,
+    agent_id: str | None = None,
+    gatekeeper: "Gatekeeper | None" = None,
+) -> tuple[AgentIdentity, AuditLog]:
+    """A fresh identity and the audit trail that records under it.
+
+    Separate from :func:`build_session` because some actions are worth
+    recording without a session: ``ac rdp`` to a pre-established forward
+    authenticates no hop, yet the launch still belongs in a trail.
+    """
+    # A distinct identity per run. A single static agent id makes concurrent
+    # executions indistinguishable in the trail, which is precisely when telling
+    # them apart matters.
+    identity = AgentIdentity.create(
+        prefix=inventory.agent_prefix,
+        session_prefix=inventory.session_prefix,
+        agent_id=agent_id,
+    )
+    log_config = inventory.logging
+    audit = AuditLog(
+        session_id=identity.session_id,
+        agent_id=identity.agent_id,
+        host_id=host_id,
+        directory=log_config.resolve_directory(),
+        trace_id=identity.trace_id,
+        enabled=log_config.enabled,
+        sink=gatekeeper.receipt if gatekeeper is not None else None,
+    )
+    return identity, audit
+
+
 def build_session(
     host_id: str,
     *,
     inventory: Inventory | None = None,
     catalog: Catalog | None = None,
     allowed_operations: tuple[str, ...] = (),
+    allow_exec: bool = False,
     idle_timeout_s: int | None = None,
     max_lifetime_s: int | None = None,
     agent_id: str | None = None,
@@ -612,35 +659,21 @@ def build_session(
     """Construct (but do not connect) a session for ``host_id``.
 
     ``gatekeeper`` plugs an external governance plane in: its ``receipt`` sink
-    mirrors every canonical audit action. None (the default) keeps today's
-    behaviour exactly.
+    mirrors every canonical audit action. None (the default) gives the session
+    a ``LocalGatekeeper``: no policy, no receipts, and approvals for agent
+    requests held in this process.
     """
     if inventory is None or catalog is None:
         loaded_inventory, loaded_catalog, _warnings = load_all()
         inventory = inventory or loaded_inventory
         catalog = catalog or loaded_catalog
 
-    # A distinct identity per run. A single static agent id makes concurrent
-    # executions indistinguishable in the trail, which is precisely when telling
-    # them apart matters.
-    identity = AgentIdentity.create(
-        prefix=inventory.agent_prefix,
-        session_prefix=inventory.session_prefix,
-        agent_id=agent_id,
-    )
-
     log_config = inventory.logging
-    directory = log_config.resolve_directory()
-    log_config.prune(directory)
+    set_library_log_level(log_config.level)
+    log_config.prune(log_config.resolve_directory())
 
-    audit = AuditLog(
-        session_id=identity.session_id,
-        agent_id=identity.agent_id,
-        host_id=host_id,
-        directory=directory,
-        trace_id=identity.trace_id,
-        enabled=log_config.enabled,
-        sink=gatekeeper.receipt if gatekeeper is not None else None,
+    identity, audit = build_audit(
+        inventory, host_id, agent_id=agent_id, gatekeeper=gatekeeper
     )
 
     session = Session(
@@ -651,7 +684,10 @@ def build_session(
         session_id=identity.session_id,
         creds=CredentialStore(prompter=select_prompter(prompter_name)),
         audit=audit,
-        gatekeeper=gatekeeper,
+        # With no external plane, the session holds its own approvals and the
+        # operator resolves them at this session's prompt.
+        gatekeeper=gatekeeper if gatekeeper is not None else LocalGatekeeper(),
+        agent_held_prompt=under_agent_harness(),
         # An explicit agent id (flag or env) or a Claude Code environment
         # means an agent drives this session: its confirm gate resolves out
         # of band, never via a flag the agent itself passes.
@@ -662,6 +698,7 @@ def build_session(
             or os.environ.get("CLAUDE_CODE")
         ),
         allowed_operations=allowed_operations,
+        allow_exec=allow_exec,
         fallback_to_hop=fallback_to_hop,
     )
     if idle_timeout_s is not None:

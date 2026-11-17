@@ -1,5 +1,14 @@
 # Documentation map
 
+The documentation is in two parts:
+
+1. **The standalone product** — everything in this map except
+   `integration/`. No AgentLighthouse is needed, and every command is a
+   standalone one (`uv sync --extra dev`, `uv run ac …`, `uv run pytest`).
+2. **Integrated with AgentLighthouse** —
+   [integration/README.md](integration/README.md). Its own commands, the MCP
+   proxy, current state, plan and history.
+
 Start with the row that matches what you are trying to do.
 
 | I want to… | Read |
@@ -17,7 +26,8 @@ Start with the row that matches what you are trying to do.
 | **Deploy Claude against production safely** | [CLAUDE_PRODUCTION_GUARDRAILS.md](CLAUDE_PRODUCTION_GUARDRAILS.md) |
 | **Understand how it is built** | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | **Change the code** | [implementation/README.md](implementation/README.md) |
-| **Know the current state and what is missing** | [gap-analysis.md](gap-analysis.md), [production-readiness.md](production-readiness.md) |
+| **Know what is fixed, what is open, and what blocks production** | [../BugFixNchange.md](../BugFixNchange.md), [production-readiness.md](production-readiness.md) |
+| **Run it integrated with AgentLighthouse** | [integration/README.md](integration/README.md) |
 
 ---
 
@@ -78,7 +88,6 @@ docs/
   OPERATIONS.md                    dev, production, monitoring, backup, upgrades
   SECURITY.md                      threat model, controls, hardening, IR
   CLAUDE_PRODUCTION_GUARDRAILS.md  deploying an agent against production
-  gap-analysis.md                  documentation and functionality gaps
   production-readiness.md          readiness assessment, risks, assumptions, limits
   guides/
     runbook.md                     step-by-step, then troubleshooting by symptom
@@ -91,10 +100,11 @@ docs/
     cli-reference.md               every command, flag and exit code
     audit-events.md                every audit record and its fields
     session-protocol.md            the loopback wire protocol
-  reports/
-    README.md                      what these are, and what they are not
-    axway-session-error-report.md  connectivity/session findings, Axway CVT
-    axway-app01-log-error-report.md application log findings, app-stg01
+  integration/                     PART 2: integrated with AgentLighthouse
+    README.md                      start here: commands, state, plan
+    mcp-proxy-config.md            ac mcp behind the AgentLighthouse proxy
+    siem-combined-stream.md        one SIEM stream for both audit trails
+    history.md                     how the integration was built (phases, decisions)
 ```
 
 Outside `docs/`:
@@ -102,7 +112,7 @@ Outside `docs/`:
 | File | Purpose |
 |---|---|
 | [../README.md](../README.md) | Project overview and quick start |
-| [../BugFixNchange.md](../BugFixNchange.md) | Bugs fixed, and what is still open |
+| [../BugFixNchange.md](../BugFixNchange.md) | Release notes, everything fixed, and everything still open |
 | [../config/inventory.example.yaml](../config/inventory.example.yaml) | Annotated inventory template |
 | [../config/operations.yaml](../config/operations.yaml) | The shipped operation catalogue |
 | [../config/briefs/TEMPLATE.yaml](../config/briefs/TEMPLATE.yaml) | Annotated task-brief template |
@@ -125,5 +135,6 @@ Outside `docs/`:
 | **step** | One command inside an operation, with an expectation |
 | **brief** | The instruction document for one job on one host |
 | **campaign** | A fan-out of one brief across several hosts' live sessions |
-| **gated** | Requires the operator's explicit `--confirm` |
+| **gated** | Requires the operator's explicit approval: `--confirm` from a human, `:approve <id>` at the `ac connect` prompt for an agent |
+| **agent-attached** | A session opened with `--agent-id` (or `AC_AGENT_ID`, or from inside an agent harness): `--confirm` carries no weight on it |
 | **declared, never discovered** | Connectivity comes only from config; nothing is probed or guessed |

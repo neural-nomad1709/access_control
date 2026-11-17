@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import typer
 from rich.console import Console
@@ -23,25 +23,32 @@ from rich.table import Table
 from rich.text import Text
 
 from . import __version__
-from .audit import list_sessions, load_session
+from .audit import list_sessions, load_session, record_rdp_launch
 from .brief import load_brief, validate_brief
 from .campaign import load_campaign, plan_campaign, run_campaign
 from .config import load_all, load_inventory, load_operations
-from .credentials import TerminalPrompter, WindowsCredUIPrompter, select_prompter
+from .credentials import (
+    TerminalPrompter,
+    WindowsCredUIPrompter,
+    caller_marker,
+    select_prompter,
+)
 from .daemon import (
     EphemeralSession,
     SessionClient,
     SessionServer,
     attach,
+    build_audit,
     build_session,
     list_descriptors,
 )
-from .errors import AccessControlError
+from .errors import AccessControlError, RouteError
+from .gatekeeper import LocalGatekeeper
 from .logging_setup import install_quiet_logging, record_unexpected
 from .operator_shell import run_operator_shell
 from .paths import config_dir, log_dir, session_dir
 from .probe import probe_route, summarise
-from .route import plan_hop_route, plan_route
+from .route import Route, plan_hop_route, plan_route
 from .transport.interactive import launch_rdp, launch_ssh_shell
 
 app = typer.Typer(
@@ -57,6 +64,17 @@ err = Console(stderr=True)
 def _fail(message: str, code: int = 1) -> None:
     err.print(f"[bold red]error:[/bold red] {message}")
     raise typer.Exit(code)
+
+
+def _announce_approval(row: dict[str, Any]) -> None:
+    """Tell the operator, in the ``ac connect`` window, that an agent is waiting."""
+    request_id = row["request_id"]
+    _raw(
+        f"\napproval requested: {request_id}  {row['tool']}  ({row['actor']})\n"
+        f"{row['detail']}\n"
+        f"  :approve {request_id}   or   :deny {request_id}",
+        "yellow",
+    )
 
 
 def _client_or_fail(host_id: str) -> SessionClient:
@@ -364,7 +382,14 @@ def connect(
         None,
         "--ops",
         help="Comma-separated operations to authorise for this session. "
-        "Omit to allow every operation the catalog permits for this host.",
+        "Omit to allow every operation the catalog permits for this host. "
+        "A session restricted this way also refuses ad-hoc commands (ac exec) "
+        "unless --allow-exec is given.",
+    ),
+    allow_exec: bool = typer.Option(
+        False,
+        "--allow-exec",
+        help="With --ops, still permit ad-hoc commands (ac exec). No effect without --ops.",
     ),
     idle_timeout: int = typer.Option(
         1800, "--idle-timeout", help="Seconds of inactivity before the session closes (0 = never)"
@@ -431,6 +456,7 @@ def connect(
         session = build_session(
             host,
             allowed_operations=allowed,
+            allow_exec=allow_exec,
             idle_timeout_s=idle_timeout,
             max_lifetime_s=max_lifetime,
             agent_id=agent_id,
@@ -439,6 +465,9 @@ def connect(
     except AccessControlError as exc:
         _fail(str(exc))
         return
+
+    if isinstance(session.gatekeeper, LocalGatekeeper):
+        session.gatekeeper.on_request = _announce_approval
 
     console.print(
         Panel(
@@ -836,7 +865,20 @@ def brief_run(
     # -- operations --------------------------------------------------------
     results: list[dict[str, Any]] = []
     failed = False
+    # The ceiling stops anything new from starting late. An operation already
+    # running is bounded by its own step timeouts, not by this.
+    ceiling_s = brief.rules.max_duration_minutes * 60
+    started = time.monotonic()
     for index, step in enumerate(brief.operations, 1):
+        if ceiling_s > 0 and time.monotonic() - started > ceiling_s:
+            not_started = ", ".join(s.operation for s in brief.operations[index - 1:])
+            _raw(
+                f"brief '{brief.id}' passed its max_duration_minutes "
+                f"({brief.rules.max_duration_minutes}). Not started: {not_started}.",
+                "red",
+            )
+            failed = True
+            break
         console.print(f"\n[bold cyan]({index}/{len(brief.operations)}) {step.operation}[/bold cyan]")
         try:
             result = client.call(
@@ -846,6 +888,7 @@ def brief_run(
                 confirmed=confirm,
                 start_at=step.start_at,
                 only_steps=list(step.only_steps) or None,
+                **caller_marker(),
             )
         except AccessControlError as exc:
             _raw(str(exc), "red")
@@ -868,6 +911,7 @@ def brief_run(
                         client.call(
                             "run_operation", operation_id=rb.operation,
                             params=dict(rb.params), confirmed=confirm,
+                            **caller_marker(),
                         )
                     )
             break
@@ -1103,6 +1147,7 @@ def run_operation(
                 dry_run=dry_run,
                 only_steps=only_steps,
                 start_at=start_at,
+                **caller_marker(),
             )
         elif dry_run:
             # A dry run touches no server, so it needs no session at all.
@@ -1202,6 +1247,7 @@ def exec_command(
             shell=shell,
             confirmed=confirm,
             timeout_s=timeout,
+            **caller_marker(),
         )
     except AccessControlError as exc:
         _fail(str(exc))
@@ -1280,6 +1326,9 @@ def rdp(
     try:
         target = inventory.node(node)
         route = plan_hop_route(inventory, node)
+        dest_host, dest_port, forwarded = _interactive_destination(
+            route, node, "rdp", target.rdp_port
+        )
     except AccessControlError as exc:
         _fail(str(exc))
         return
@@ -1289,33 +1338,112 @@ def rdp(
             f"'{node}' is not configured for RDP (interactive: {target.interactive}).\n"
             f"For a shell use:  uv run ac shell {node}"
         )
+    if forwarded:
+        console.print(
+            f"'{node}' is declared as a pre-established forward at "
+            f"{dest_host}:{dest_port}; connecting to it directly."
+        )
 
     client = attach(node)
     if client is not None:
-        tunnel = client.call(
-            "open_tunnel", dest_host=target.host, dest_port=target.rdp_port, purpose=f"rdp:{node}"
-        )
         username = (client.call("credentials_for", node_id=node) or {}).get("username")
+
+        def record_in_session(endpoint: str, user: str | None, staged: bool) -> None:
+            client.call(
+                "rdp_launched", node_id=node, endpoint=endpoint, username=user, staged=staged
+            )
+
+        if forwarded:
+            _run_rdp(
+                f"{dest_host}:{dest_port}", node, username or target.user,
+                stage_credentials, full_screen, record=record_in_session,
+            )
+            return
+        tunnel = client.call(
+            "open_tunnel", dest_host=dest_host, dest_port=dest_port, purpose=f"rdp:{node}"
+        )
         _run_rdp(
             f"127.0.0.1:{tunnel['local_port']}",
             node,
             username or target.user,
             stage_credentials,
             full_screen,
+            record=record_in_session,
         )
         client.call("close_tunnel", tunnel_id=tunnel["tunnel_id"])
+        return
+
+    if forwarded:
+        # Nothing to authenticate or tunnel, so no session; the launch still
+        # gets a trail of its own.
+        _identity, audit = build_audit(inventory, node)
+        _run_rdp(
+            f"{dest_host}:{dest_port}", node, target.user, stage_credentials, full_screen,
+            record=lambda endpoint, user, staged: record_rdp_launch(
+                audit, node, endpoint, user, staged
+            ),
+        )
         return
 
     # No session: build a temporary one just to carry the tunnel.
     console.print(f"No live session for '{node}'; opening a temporary one for the tunnel.")
     console.print(f"route: {route.describe()}")
     with EphemeralSession(node, inventory=inventory) as session:
-        tunnel = session.open_tunnel(target.host, target.rdp_port, purpose=f"rdp:{node}")
-        _run_rdp(tunnel.endpoint, node, target.user, stage_credentials, full_screen)
+        tunnel = session.open_tunnel(dest_host, dest_port, purpose=f"rdp:{node}")
+        _run_rdp(
+            tunnel.endpoint,
+            node,
+            target.user,
+            stage_credentials,
+            full_screen,
+            record=lambda endpoint, user, staged: record_rdp_launch(
+                session.audit, node, endpoint, user, staged
+            ) if session.audit else None,
+        )
+
+
+def _interactive_destination(
+    route: Route, node: str, protocol: str, default_port: int
+) -> tuple[str, int, bool]:
+    """Where a human's client should go, as the route declares it.
+
+    Returns ``(host, port, forwarded)``. ``forwarded`` means the address is a
+    pre-established forward on this machine: the client connects to it as it
+    is, and nothing is tunnelled.
+
+    The node's own ``hostname`` is only a default; the address valid from the
+    hop before it lives on the resolved leg. A leg endpoint for ``protocol`` wins;
+    otherwise the leg's address on the node's own port, since a Windows node
+    declared with only a WinRM endpoint still answers RDP on its ``rdp_port``.
+    """
+    leg = route.leg_for(node)
+    if leg is None:
+        raise RouteError(f"no declared route leg for '{node}'")
+    for endpoint in (leg.interactive, leg.endpoint):
+        if endpoint is not None and endpoint.protocol == protocol:
+            return endpoint.hostname, endpoint.port, endpoint.preestablished
+    if leg.endpoint.preestablished:
+        # The forward carries one protocol to one port; another port on
+        # "localhost" is this machine, not the node.
+        raise RouteError(
+            f"'{node}' is declared as a pre-established forward for "
+            f"{leg.endpoint.protocol} at {leg.endpoint.hostname}:{leg.endpoint.port}, "
+            f"and there is no forward for {protocol}.\n"
+            f"Declare the {protocol} forward on that route as well, or remove "
+            f"'preestablished' and give the address as seen from {leg.source} so the "
+            f"tunnel can be built here."
+        )
+    return leg.endpoint.hostname, default_port, False
 
 
 def _run_rdp(
-    endpoint: str, node: str, username: str | None, stage: bool, full_screen: bool
+    endpoint: str,
+    node: str,
+    username: str | None,
+    stage: bool,
+    full_screen: bool,
+    *,
+    record: Callable[[str, str | None, bool], Any],
 ) -> None:
     password = None
     if stage:
@@ -1332,6 +1460,8 @@ def _run_rdp(
         full_screen=full_screen,
     )
     try:
+        # Inside the try: a failed record must still clean up staged credentials.
+        record(endpoint, username, stage)
         console.print("[dim]Waiting for the RDP window to close ...[/dim]")
         session.wait()
     except KeyboardInterrupt:
@@ -1454,14 +1584,26 @@ def shell(node: str = typer.Argument(..., help="Host or hop id")) -> None:
     inventory = load_inventory()
     try:
         target = inventory.node(node)
+        route = plan_hop_route(inventory, node)
+        dest_host, dest_port, forwarded = _interactive_destination(
+            route, node, "ssh", target.port
+        )
     except AccessControlError as exc:
         _fail(str(exc))
+        return
+
+    if forwarded:
+        console.print(
+            f"'{node}' is declared as a pre-established forward at "
+            f"{dest_host}:{dest_port}; connecting to it directly."
+        )
+        launch_ssh_shell(dest_host, dest_port, username=target.user, target_label=node)
         return
 
     client = attach(node)
     if client is not None:
         tunnel = client.call(
-            "open_tunnel", dest_host=target.host, dest_port=target.port, purpose=f"shell:{node}"
+            "open_tunnel", dest_host=dest_host, dest_port=dest_port, purpose=f"shell:{node}"
         )
         try:
             launch_ssh_shell(
@@ -1472,7 +1614,7 @@ def shell(node: str = typer.Argument(..., help="Host or hop id")) -> None:
         return
 
     with EphemeralSession(node, inventory=inventory) as session:
-        tunnel = session.open_tunnel(target.host, target.port, purpose=f"shell:{node}")
+        tunnel = session.open_tunnel(dest_host, dest_port, purpose=f"shell:{node}")
         launch_ssh_shell(
             "127.0.0.1", int(tunnel.local_port or 0), username=target.user, target_label=node
         )

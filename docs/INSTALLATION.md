@@ -100,6 +100,7 @@ This creates `.venv/` and installs from the locked `uv.lock`.
 | `rich>=13.0` | Terminal rendering |
 | `pywin32>=306` | Windows credential dialog — **Windows only**, skipped elsewhere |
 | `pytest`, `pytest-cov` | The `dev` extra: test suite |
+| `agentlighthouse-*` | **Not installed.** Only the integrated mode uses them: [integration/README.md](integration/README.md) |
 
 `spnego` arrives transitively with `pypsrp` and provides the pure-Python NTLM
 provider.
@@ -114,6 +115,11 @@ python -m venv .venv
 pip install -e ".[dev]"
 ac doctor
 ```
+
+This install is the standalone product. It contains no AgentLighthouse package
+and does not need an AgentLighthouse checkout on the machine. Running integrated
+with AgentLighthouse uses different commands, documented separately in
+[integration/README.md](integration/README.md).
 
 ---
 
@@ -183,7 +189,7 @@ To produce a wheel (hatchling, packages `src/access_control`):
 
 ```powershell
 uv build
-# dist/access_control-0.2.0-py3-none-any.whl
+# dist/access_control-0.2.1-py3-none-any.whl
 ```
 
 Installing that wheel puts an `ac` executable on `PATH`, but note that
@@ -252,13 +258,16 @@ uv run ac disconnect <host>
 ## 8. Run the test suite
 
 ```powershell
-uv run pytest                                            # 340 tests, fully offline
+uv run pytest                                            # 516 passed, 3 skipped; fully offline
 uv run pytest -q tests/test_e2e.py                       # the two end-to-end loops
 uv run pytest --cov=access_control --cov-report=term-missing
 ```
 
 Every test runs offline — the SSH layer is exercised against a real Paramiko SSH
 server started in-process, not a mock. See [guides/testing.md](guides/testing.md).
+
+The 3 skipped are the AgentLighthouse integration tests, which run only in the
+integrated mode ([integration/README.md](integration/README.md#4-tests-that-need-the-integration)).
 
 ---
 

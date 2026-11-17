@@ -39,8 +39,8 @@ Files written under `logs/`:
 | `<trace_id>.jsonl` | The append-only audit trail for one session |
 | `<trace_id>.md` | Human-readable session summary written on close |
 | `<session_id>-NN-<operation_id>.md` | Shareable per-operation report |
-| `transport.log` | Paramiko / pypsrp / spnego library logging, redacted |
-| `errors.log` | Tracebacks of unexpected (non-`AccessControlError`) failures |
+| `transport.log` | Paramiko / pypsrp / spnego library logging, redacted. Verbosity follows `logging.level`; rolls over at 5 MiB, 3 backups kept |
+| `errors.log` | Tracebacks of unexpected (non-`AccessControlError`) failures. Rolls over at 5 MiB, 1 backup kept |
 
 ---
 
@@ -52,7 +52,7 @@ Files written under `logs/`:
 | `AC_LOG_DIR` | `logging.path`, else `<root>/logs` | Highest-precedence audit log directory | Use to feed a SIEM collection path |
 | `AC_CONFIG_DIR` | `<repo>/config` | Where `inventory.yaml` / `operations.yaml` are read from | — |
 | `AC_HOME` | repo root inferred from the package location | Project root (the directory holding `config/`) | — |
-| `AC_AGENT_ID` | `AGT-<date>-<seq>` | Pins the agent id on every record | Set it per pipeline/run so trails correlate |
+| `AC_AGENT_ID` | `AGT-<date>-<random suffix>` | Pins the agent id on every record. Set when `ac connect` runs, it also marks the session agent-attached (as `--agent-id` does) | Set it per pipeline/run so trails correlate |
 | `AC_PROMPTER` | auto | Force a prompter: `terminal`, `windows`\|`gui`\|`dialog`, `none` | `none` disables prompting entirely |
 | `AC_NO_GUI_PROMPT` | unset | Any value disables the Windows credential dialog | Forces terminal-only prompting |
 | `AC_HOST_KEY_POLICY` | `accept-new` | `strict` refuses an unknown host key; a *changed* key is fatal under both | **Set `strict` for production hardening** |
@@ -96,7 +96,7 @@ routes:  [...]      # older alternative to per-node `via:` — cannot be combine
 | `enabled` | bool | `true` | `false` keeps the in-memory trail (so `ac status` works) but writes nothing to disk |
 | `path` | string | platform default | Expands `~` and `%VARS%`. Point at a collected directory for SIEM ingestion. **Never inside the repo.** |
 | `retention_days` | int ≥ 0 | `30` | `0` keeps everything. Pruning of `*.jsonl` / `*.md` older than this runs when a session starts, and never raises |
-| `level` | enum | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR`. Validated; an unknown value is a load error. Currently recorded and reported but not yet used to filter records |
+| `level` | enum | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR`. Validated; an unknown value is a load error. Sets the verbosity of `transport.log` (library logging) when a session is built. The audit trail is never filtered by level |
 
 `AC_LOG_DIR` overrides `path`.
 
@@ -385,7 +385,7 @@ rollback:   [...]
 success_criteria: [...]
 must_not:   [...]
 rules:      {...}
-postcheck:  {...}             # parsed, but NOT executed — see note below
+postcheck:  {...}             # same keys as preflight; runs after the operations succeed
 ```
 
 ### 5.1 `preflight:`
@@ -421,19 +421,22 @@ A bare string is accepted as shorthand for `{operation: <string>}`.
 
 | Rule | Default | **Enforced?** |
 |---|---|---|
-| `confirm_destructive` | `true` | Advisory. Setting it `false` produces a validation warning; gating itself comes from the catalogue and `--confirm` |
+| `confirm_destructive` | `true` | Advisory. Setting it `false` produces a validation warning; gating itself comes from the catalogue and `--confirm` (or `:approve` for an agent) |
 | `stop_on_first_failure` | `true` | Yes, by `ac brief run` (each step's own `on_failure` decides first) |
 | `reboot_allowed` | `false` | **Yes** — a brief listing an operation whose steps could restart the host is rejected at validation time |
-| `max_duration_minutes` | `120` | **Not enforced.** Recorded and rendered for the reader only |
+| `max_duration_minutes` | `120` | Enforced by `ac brief run`: once this much time has passed, no further operation is started and the brief fails (exit 2). An operation already running is not interrupted. `0` = no ceiling |
 | `allow_diagnostic_commands` | `true` | Advisory to the agent |
 | `allow_unlisted_operations` | `false` | Advisory to the agent |
 
 A **misspelled rule is rejected**, not ignored — a silently-dropped
 `reboots_allowed: true` would be the worst possible outcome.
 
-> **`postcheck:` is parsed and returned by `ac brief show --json`, but nothing
-> executes it.** Put verification in a final operation or in `success_criteria`
-> until that is implemented. Tracked in [gap-analysis.md](gap-analysis.md).
+> **`postcheck:`** takes the same keys as `preflight:` and runs after every
+> operation has succeeded. A failing postcheck fails the brief (exit 2). It is
+> skipped when the brief already failed.
+>
+> **`brief.window`** is free text for the reader and the audit trail. Nothing
+> parses or enforces it.
 
 ---
 
@@ -447,7 +450,8 @@ campaign:
   change_ref: DEMO-HEALTH
   description: >- …
   max_parallel: 8               # default 8, minimum 1
-  confirm: false                # pre-approve gated operations fleet-wide
+  confirm: false                # a human's pre-approval of gated operations fleet-wide;
+                                # from an agent it carries no weight
 
 targets:                        # REQUIRED, non-empty
   - host: win-target01-dev          # optional: overrides the brief's own `host:`
@@ -474,7 +478,11 @@ key are adjustable without a code change.
 | Constant | Value | Config key |
 |---|---|---|
 | Session idle timeout | 1800 s | `ac connect --idle-timeout` (`0` = never) |
+| Session absolute lifetime | none | `ac connect --max-lifetime` (`0` = none) |
 | Idle watchdog poll | 15 s | — |
+| An agent's held approval lapses after | 900 s | — |
+| Brief wall-clock ceiling | 120 min | `rules.max_duration_minutes` (`0` = none) |
+| `transport.log` / `errors.log` rollover | 5 MiB; 3 / 1 backups | — |
 | Step timeout | 600 s | `steps[].timeout_s` |
 | `ac exec` timeout | 300 s | `--timeout` |
 | Diagnostic collector timeout | 120 s | — |

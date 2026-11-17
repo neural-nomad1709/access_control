@@ -15,6 +15,7 @@ observation layer, not a clever one.
 from __future__ import annotations
 
 import re
+import shlex
 import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -115,6 +116,8 @@ class OperationOutcome:
     started_at: str = ""
     #: Where the shareable summary was written, if it was.
     summary_file: str | None = None
+    #: The step ids this run set out to execute (after --only / --start-at).
+    planned_steps: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -170,7 +173,7 @@ class OperationOutcome:
         skipped = []
         if self.stopped_at:
             reached = {s.step_id for s in self.steps}
-            skipped = [s.step_id for s in self.steps if s.step_id not in reached]
+            skipped = [step_id for step_id in self.planned_steps if step_id not in reached]
 
         failed = self.failed_step
         if failed is not None:
@@ -319,12 +322,17 @@ class Engine:
         dry_run: bool = False,
         only_steps: Sequence[str] | None = None,
         start_at: str | None = None,
+        agent_caller: bool = False,
     ) -> OperationOutcome:
         """Run an operation's steps in order, stopping at the first failure.
 
         ``only_steps`` and ``start_at`` exist for the remediate-and-retry loop:
         after fixing what broke, re-running the whole operation from the top is
         usually wrong (and sometimes destructive).
+
+        ``agent_caller`` says the request came from a client running inside an
+        agent harness. It is treated like an agent-attached session: gated work
+        is held for the operator's approval and ``confirmed`` carries no weight.
         """
         op = self._operation(operation_id)
         variables = operation_variables(op, self.session.host, params or {})
@@ -342,8 +350,11 @@ class Engine:
 
         # An out-of-band approval covers these exact rendered commands, the
         # same consent an operator's --confirm expresses — so it satisfies the
-        # per-step confirm gate for gated commands inside the operation.
-        confirmed = self._check_permission(op, params or {}, confirmed, dry_run) or confirmed
+        # per-step confirm gate for gated commands inside the operation. An
+        # agent's own --confirm satisfies neither gate.
+        agent = bool(getattr(self.session, "agent_attached", False) or agent_caller)
+        approved = self._check_permission(op, params or {}, confirmed, dry_run, agent)
+        confirmed = approved or (confirmed and not agent)
 
         if self.audit:
             self.audit.emit(
@@ -356,6 +367,7 @@ class Engine:
             )
 
         selected = self._select_steps(op, only_steps, start_at)
+        outcome.planned_steps = [step.id for step in selected]
         for step in selected:
             step_outcome = self.run_step(
                 op, step, variables, confirmed=confirmed, dry_run=dry_run
@@ -501,14 +513,47 @@ class Engine:
         shell: str | None = None,
         confirmed: bool = False,
         timeout_s: int = 300,
+        agent_caller: bool = False,
     ) -> ExecResult:
         """Ad-hoc command -- the escape hatch used while diagnosing a failure."""
+        return self._run(
+            command, shell=shell, confirmed=confirmed, timeout_s=timeout_s, ad_hoc=True,
+            agent_caller=agent_caller,
+        )
+
+    def fetch_log(self, path: str, tail: int = 200) -> ExecResult:
+        """Read the tail of a remote log.
+
+        The command is built here from a path that cannot carry one (see
+        ``tail_command``), so a session's ``--ops`` scope on ad-hoc commands
+        does not apply to it.
+        """
+        command = tail_command(path, int(tail), windows=self.session.host.is_windows)
+        return self._run(command, timeout_s=180, ad_hoc=False)
+
+    def _run(
+        self,
+        command: str,
+        *,
+        shell: str | None = None,
+        confirmed: bool = False,
+        timeout_s: int = 300,
+        ad_hoc: bool,
+        agent_caller: bool = False,
+    ) -> ExecResult:
         try:
+            if ad_hoc and not getattr(self.session, "exec_permitted", True):
+                allowed = ",".join(self.session.allowed_operations)
+                raise PermissionRequired(
+                    f"ad-hoc commands are off in this session: it was restricted to "
+                    f"operations ({allowed}). Reconnect with --allow-exec to permit them:\n"
+                    f"    uv run ac connect {self.session.host_id} --ops {allowed} --allow-exec"
+                )
             self._authorize("ac_exec", {"command": command})
-            if getattr(self.session, "agent_attached", False):
-                # The escape hatch must not re-open self-approval: a governed
-                # agent's gated ad-hoc command takes the same out-of-band
-                # approval as a gated operation; --confirm never satisfies it.
+            if getattr(self.session, "agent_attached", False) or agent_caller:
+                # The escape hatch must not re-open self-approval: an agent's
+                # gated ad-hoc command takes the same out-of-band approval as
+                # a gated operation; --confirm never satisfies it.
                 self._check_exec_approval(command, confirmed)
             else:
                 safety.check(command, confirmed=confirmed)
@@ -657,7 +702,7 @@ class Engine:
             command = (
                 _windows_tail_command(pattern, spec.tail_lines)
                 if windows
-                else f"tail -n {spec.tail_lines} {pattern} 2>/dev/null"
+                else f"tail -n {spec.tail_lines} {_posix_glob(pattern)} 2>/dev/null"
             )
             out.append(self._collect_command(command, source=pattern, kind="file"))
 
@@ -729,7 +774,12 @@ class Engine:
         return op
 
     def _check_permission(
-        self, op: Operation, params: Mapping[str, Any], confirmed: bool, dry_run: bool
+        self,
+        op: Operation,
+        params: Mapping[str, Any],
+        confirmed: bool,
+        dry_run: bool,
+        agent_attached: bool,
     ) -> bool:
         """Gate the operation; returns True when an out-of-band approval was
         granted (it carries the weight of an operator's --confirm)."""
@@ -737,7 +787,14 @@ class Engine:
         # no longer be trusted to drive even normally-allowed operations
         # unattended: everything gates until the session ends.
         gated = op.is_gated or getattr(self.session, "tainted", False)
-        agent_attached = getattr(self.session, "agent_attached", False)
+        if agent_attached and not gated and not dry_run:
+            # An operation not marked gated can still contain a confirm-class
+            # command. A human's --confirm covers it at the step; an agent's
+            # does not, so the whole operation is held for approval instead.
+            gated = any(
+                step["policy"] == safety.CONFIRM
+                for step in self.preview(op.id, params)["steps"]
+            )
 
         if dry_run or not gated or (confirmed and not agent_attached):
             if self.audit and not dry_run:
@@ -951,8 +1008,20 @@ def tail_command(pattern: str, lines: int, *, windows: bool) -> str:
     if windows:
         return _windows_tail_command(pattern, lines)
     return (
-        f"tail -n {int(lines)} {pattern} 2>/dev/null || "
-        f"echo 'no such file or not readable: {pattern}'"
+        f"tail -n {int(lines)} {_posix_glob(pattern)} 2>/dev/null || "
+        f"echo {shlex.quote('no such file or not readable: ' + pattern)}"
+    )
+
+
+def _posix_glob(pattern: str) -> str:
+    """Backslash-escape every shell metacharacter except the glob ones.
+
+    The pattern must still expand (``app*.log``), so it cannot simply be
+    quoted; escaping everything else means a path like ``x; rm y`` reaches
+    ``tail`` as one literal argument instead of a second command.
+    """
+    return "".join(
+        c if c.isalnum() or c in "*?[]/._-~" else "\\" + c for c in pattern
     )
 
 
@@ -967,7 +1036,7 @@ def _windows_tail_command(pattern: str, lines: int) -> str:
         f"Sort-Object LastWriteTime -Descending | Select-Object -First 1; "
         f"if ($m) {{ \"--- $($m.FullName) ---\"; "
         f"Get-Content -Path $m.FullName -Tail {lines} -ErrorAction SilentlyContinue }} "
-        f"else {{ \"no file matched {pattern}\" }}"
+        f"else {{ 'no file matched ' + {quote_single(pattern)} }}"
     )
 
 
