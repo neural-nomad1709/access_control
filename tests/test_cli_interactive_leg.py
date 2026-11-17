@@ -35,8 +35,30 @@ def config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 description: Test bastion
                 auth: {method: password}
                 via: {from: local, hostname: 127.0.0.1, port: 22, protocol: ssh}
+              jump-forwarded:
+                kind: windows
+                username: winuser
+                description: Both endpoints are forwards the operator started
+                auth: {method: password}
+                via:
+                  from: bastion1
+                  automation:  {hostname: localhost, port: 45985, protocol: winrm, preestablished: true}
+                  interactive: {hostname: localhost, port: 44001, protocol: rdp, preestablished: true}
+              jump-winrm-forward-only:
+                kind: windows
+                username: winuser
+                description: Only WinRM was forwarded; nothing carries RDP
+                auth: {method: password}
+                via: {from: bastion1, hostname: localhost, port: 45986, protocol: winrm}
 
             hosts:
+              linux-forwarded:
+                kind: linux
+                username: appuser
+                description: SSH arrives on a forward the operator started
+                auth: {method: password}
+                via: {from: bastion1, hostname: localhost, port: 40022, protocol: ssh}
+
               linux-app01:
                 kind: linux
                 hostname: stale-name.example
@@ -59,6 +81,7 @@ def config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         encoding="utf-8",
     )
     monkeypatch.setenv("AC_CONFIG_DIR", str(directory))
+    monkeypatch.setenv("AC_DATA_DIR", str(tmp_path / "data"))
     return directory
 
 
@@ -88,10 +111,29 @@ class AuditedEphemeral(RecordingEphemeral):
 
 
 @pytest.fixture(autouse=True)
-def no_clients(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stop at the process boundary: no ssh or mstsc is started."""
-    monkeypatch.setattr(cli, "launch_ssh_shell", lambda *a, **k: None)
-    monkeypatch.setattr(cli, "launch_rdp", lambda *a, **k: FakeRdpSession())
+def launches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, ...]]:
+    """Stop at the process boundary: no ssh or mstsc is started. Returns the
+    positional arguments each launch was given."""
+    seen: list[tuple[Any, ...]] = []
+
+    def ssh(*args: Any, **kwargs: Any) -> None:
+        seen.append(("ssh", *args))
+
+    def rdp(*args: Any, **kwargs: Any) -> FakeRdpSession:
+        seen.append(("rdp", *args))
+        return FakeRdpSession()
+
+    monkeypatch.setattr(cli, "launch_ssh_shell", ssh)
+    monkeypatch.setattr(cli, "launch_rdp", rdp)
+    return seen
+
+
+class ForbiddenEphemeral:
+    """A pre-established forward needs no session; building one would prompt
+    the operator for hop passwords to reach something already reachable."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("no session should be built for a pre-established forward")
 
 
 def _tunnel_dest(client: RecordingClient) -> tuple[str, int]:
@@ -139,6 +181,77 @@ class TestRdpUsesTheInteractiveLeg:
         assert result.exit_code == 0, result.output
         kwargs = RecordingEphemeral.last_session.open_tunnel_kwargs
         assert (kwargs["dest_host"], kwargs["dest_port"]) == ("10.0.0.202", 3390)
+
+
+class TestPreestablishedForward:
+    """The forward already exists on this machine: the client is pointed at it
+    and nothing is tunnelled. Building a tunnel to ``localhost`` from the bastion
+    would reach the bastion itself."""
+
+    def test_rdp_attached_goes_straight_to_the_forward(
+        self, config_dir: Path, monkeypatch: pytest.MonkeyPatch, launches
+    ) -> None:
+        client = RecordingClient()
+        monkeypatch.setattr(cli, "attach", lambda node: client)
+
+        result = CliRunner().invoke(cli.app, ["rdp", "jump-forwarded"])
+
+        assert result.exit_code == 0, result.output
+        assert launches == [("rdp", "localhost:44001")]
+        methods = [m for m, _ in client.calls]
+        assert "open_tunnel" not in methods
+        launched = [kw for m, kw in client.calls if m == "rdp_launched"]
+        assert launched[0]["endpoint"] == "localhost:44001"
+
+    def test_rdp_without_a_session_builds_none_and_still_audits(
+        self, config_dir: Path, monkeypatch: pytest.MonkeyPatch, launches, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(cli, "attach", lambda node: None)
+        monkeypatch.setattr(cli, "EphemeralSession", ForbiddenEphemeral)
+
+        result = CliRunner().invoke(cli.app, ["rdp", "jump-forwarded"])
+
+        assert result.exit_code == 0, result.output
+        assert launches == [("rdp", "localhost:44001")]
+        trails = list((tmp_path / "data" / "logs").glob("*.jsonl"))
+        assert len(trails) == 1
+        text = trails[0].read_text(encoding="utf-8")
+        assert '"action": "RDP_LAUNCH"' in text and "localhost:44001" in text
+
+    def test_shell_attached_goes_straight_to_the_forward(
+        self, config_dir: Path, monkeypatch: pytest.MonkeyPatch, launches
+    ) -> None:
+        client = RecordingClient()
+        monkeypatch.setattr(cli, "attach", lambda node: client)
+
+        result = CliRunner().invoke(cli.app, ["shell", "linux-forwarded"])
+
+        assert result.exit_code == 0, result.output
+        assert launches == [("ssh", "localhost", 40022)]
+        assert "open_tunnel" not in [m for m, _ in client.calls]
+
+    def test_shell_without_a_session_builds_none(
+        self, config_dir: Path, monkeypatch: pytest.MonkeyPatch, launches
+    ) -> None:
+        monkeypatch.setattr(cli, "attach", lambda node: None)
+        monkeypatch.setattr(cli, "EphemeralSession", ForbiddenEphemeral)
+
+        result = CliRunner().invoke(cli.app, ["shell", "linux-forwarded"])
+
+        assert result.exit_code == 0, result.output
+        assert launches == [("ssh", "localhost", 40022)]
+
+    def test_rdp_is_refused_when_only_another_protocol_was_forwarded(
+        self, config_dir: Path, monkeypatch: pytest.MonkeyPatch, launches
+    ) -> None:
+        monkeypatch.setattr(cli, "attach", lambda node: None)
+        monkeypatch.setattr(cli, "EphemeralSession", ForbiddenEphemeral)
+
+        result = CliRunner().invoke(cli.app, ["rdp", "jump-winrm-forward-only"])
+
+        assert result.exit_code == 1
+        assert launches == []
+        assert "no forward for rdp" in result.output.replace("\n", " ")
 
 
 class TestRdpLaunchIsAudited:

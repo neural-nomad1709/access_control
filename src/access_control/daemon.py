@@ -604,6 +604,40 @@ class SessionServer:
 # --------------------------------------------------------------------------
 
 
+def build_audit(
+    inventory: Inventory,
+    host_id: str,
+    *,
+    agent_id: str | None = None,
+    gatekeeper: "Gatekeeper | None" = None,
+) -> tuple[AgentIdentity, AuditLog]:
+    """A fresh identity and the audit trail that records under it.
+
+    Separate from :func:`build_session` because some actions are worth
+    recording without a session: ``ac rdp`` to a pre-established forward
+    authenticates no hop, yet the launch still belongs in a trail.
+    """
+    # A distinct identity per run. A single static agent id makes concurrent
+    # executions indistinguishable in the trail, which is precisely when telling
+    # them apart matters.
+    identity = AgentIdentity.create(
+        prefix=inventory.agent_prefix,
+        session_prefix=inventory.session_prefix,
+        agent_id=agent_id,
+    )
+    log_config = inventory.logging
+    audit = AuditLog(
+        session_id=identity.session_id,
+        agent_id=identity.agent_id,
+        host_id=host_id,
+        directory=log_config.resolve_directory(),
+        trace_id=identity.trace_id,
+        enabled=log_config.enabled,
+        sink=gatekeeper.receipt if gatekeeper is not None else None,
+    )
+    return identity, audit
+
+
 def build_session(
     host_id: str,
     *,
@@ -629,28 +663,12 @@ def build_session(
         inventory = inventory or loaded_inventory
         catalog = catalog or loaded_catalog
 
-    # A distinct identity per run. A single static agent id makes concurrent
-    # executions indistinguishable in the trail, which is precisely when telling
-    # them apart matters.
-    identity = AgentIdentity.create(
-        prefix=inventory.agent_prefix,
-        session_prefix=inventory.session_prefix,
-        agent_id=agent_id,
-    )
-
     log_config = inventory.logging
     set_library_log_level(log_config.level)
-    directory = log_config.resolve_directory()
-    log_config.prune(directory)
+    log_config.prune(log_config.resolve_directory())
 
-    audit = AuditLog(
-        session_id=identity.session_id,
-        agent_id=identity.agent_id,
-        host_id=host_id,
-        directory=directory,
-        trace_id=identity.trace_id,
-        enabled=log_config.enabled,
-        sink=gatekeeper.receipt if gatekeeper is not None else None,
+    identity, audit = build_audit(
+        inventory, host_id, agent_id=agent_id, gatekeeper=gatekeeper
     )
 
     session = Session(

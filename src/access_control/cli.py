@@ -33,6 +33,7 @@ from .daemon import (
     SessionClient,
     SessionServer,
     attach,
+    build_audit,
     build_session,
     list_descriptors,
 )
@@ -1288,7 +1289,9 @@ def rdp(
     try:
         target = inventory.node(node)
         route = plan_hop_route(inventory, node)
-        dest_host, dest_port = _interactive_destination(route, node, "rdp", target.rdp_port)
+        dest_host, dest_port, forwarded = _interactive_destination(
+            route, node, "rdp", target.rdp_port
+        )
     except AccessControlError as exc:
         _fail(str(exc))
         return
@@ -1298,24 +1301,51 @@ def rdp(
             f"'{node}' is not configured for RDP (interactive: {target.interactive}).\n"
             f"For a shell use:  uv run ac shell {node}"
         )
+    if forwarded:
+        console.print(
+            f"'{node}' is declared as a pre-established forward at "
+            f"{dest_host}:{dest_port}; connecting to it directly."
+        )
 
     client = attach(node)
     if client is not None:
+        username = (client.call("credentials_for", node_id=node) or {}).get("username")
+
+        def record_in_session(endpoint: str, user: str | None, staged: bool) -> None:
+            client.call(
+                "rdp_launched", node_id=node, endpoint=endpoint, username=user, staged=staged
+            )
+
+        if forwarded:
+            _run_rdp(
+                f"{dest_host}:{dest_port}", node, username or target.user,
+                stage_credentials, full_screen, record=record_in_session,
+            )
+            return
         tunnel = client.call(
             "open_tunnel", dest_host=dest_host, dest_port=dest_port, purpose=f"rdp:{node}"
         )
-        username = (client.call("credentials_for", node_id=node) or {}).get("username")
         _run_rdp(
             f"127.0.0.1:{tunnel['local_port']}",
             node,
             username or target.user,
             stage_credentials,
             full_screen,
-            record=lambda endpoint, user, staged: client.call(
-                "rdp_launched", node_id=node, endpoint=endpoint, username=user, staged=staged
-            ),
+            record=record_in_session,
         )
         client.call("close_tunnel", tunnel_id=tunnel["tunnel_id"])
+        return
+
+    if forwarded:
+        # Nothing to authenticate or tunnel, so no session; the launch still
+        # gets a trail of its own.
+        _identity, audit = build_audit(inventory, node)
+        _run_rdp(
+            f"{dest_host}:{dest_port}", node, target.user, stage_credentials, full_screen,
+            record=lambda endpoint, user, staged: record_rdp_launch(
+                audit, node, endpoint, user, staged
+            ),
+        )
         return
 
     # No session: build a temporary one just to carry the tunnel.
@@ -1337,8 +1367,12 @@ def rdp(
 
 def _interactive_destination(
     route: Route, node: str, protocol: str, default_port: int
-) -> tuple[str, int]:
-    """The address a human's client is tunnelled to, as the route declares it.
+) -> tuple[str, int, bool]:
+    """Where a human's client should go, as the route declares it.
+
+    Returns ``(host, port, forwarded)``. ``forwarded`` means the address is a
+    pre-established forward on this machine: the client connects to it as it
+    is, and nothing is tunnelled.
 
     The node's own ``hostname`` is only a default; the address valid from the
     hop before it lives on the resolved leg. A leg endpoint for ``protocol`` wins;
@@ -1350,8 +1384,19 @@ def _interactive_destination(
         raise RouteError(f"no declared route leg for '{node}'")
     for endpoint in (leg.interactive, leg.endpoint):
         if endpoint is not None and endpoint.protocol == protocol:
-            return endpoint.hostname, endpoint.port
-    return leg.endpoint.hostname, default_port
+            return endpoint.hostname, endpoint.port, endpoint.preestablished
+    if leg.endpoint.preestablished:
+        # The forward carries one protocol to one port; another port on
+        # "localhost" is this machine, not the node.
+        raise RouteError(
+            f"'{node}' is declared as a pre-established forward for "
+            f"{leg.endpoint.protocol} at {leg.endpoint.hostname}:{leg.endpoint.port}, "
+            f"and there is no forward for {protocol}.\n"
+            f"Declare the {protocol} forward on that route as well, or remove "
+            f"'preestablished' and give the address as seen from {leg.source} so the "
+            f"tunnel can be built here."
+        )
+    return leg.endpoint.hostname, default_port, False
 
 
 def _run_rdp(
@@ -1503,9 +1548,19 @@ def shell(node: str = typer.Argument(..., help="Host or hop id")) -> None:
     try:
         target = inventory.node(node)
         route = plan_hop_route(inventory, node)
-        dest_host, dest_port = _interactive_destination(route, node, "ssh", target.port)
+        dest_host, dest_port, forwarded = _interactive_destination(
+            route, node, "ssh", target.port
+        )
     except AccessControlError as exc:
         _fail(str(exc))
+        return
+
+    if forwarded:
+        console.print(
+            f"'{node}' is declared as a pre-established forward at "
+            f"{dest_host}:{dest_port}; connecting to it directly."
+        )
+        launch_ssh_shell(dest_host, dest_port, username=target.user, target_label=node)
         return
 
     client = attach(node)

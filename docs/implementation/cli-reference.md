@@ -321,6 +321,15 @@ hop or a host. Refused if the node is not configured for RDP.
 If a session is live it borrows that session's tunnel and pre-fills the username
 from it; otherwise it opens a temporary session just to carry the forward.
 
+The destination is the address the route declares for RDP (the leg's
+`interactive:` endpoint), not the node's own `hostname:`. If that endpoint is
+`preestablished: true`, `mstsc` is pointed straight at it: no tunnel is built and
+no hop is authenticated. If only another protocol was forwarded (say WinRM), the
+command is refused, because another port on `localhost` is your own machine.
+
+Every launch is recorded as `RDP_LAUNCH`: in the live session's trail, or in a
+trail of its own when there is no session.
+
 `--stage-credentials` pre-fills the password via `cmdkey` instead of letting
 `mstsc` prompt. **Off by default** — letting Windows prompt keeps the password out
 of any process list. The staged credential and the generated `.rdp` file are
@@ -336,14 +345,19 @@ handles raw mode, resizing and Ctrl-C correctly on Windows). Host-key checking i
 disabled for the *loopback endpoint only* — the forward already terminates on a
 bastion whose key was verified.
 
+The destination is the address the route declares for SSH. If it is
+`preestablished: true`, `ssh` is pointed straight at that forward and nothing is
+tunnelled.
+
 ### `ac tunnel <node> [--port N] [--remote-port N]`
 
 Holds a port forward open through the same authenticated chain, for any client:
 `mstsc`, mRemoteNG, a database tool, a browser. Prints the local endpoint and the
 exact `mstsc` / `ssh` commands to use it. Ctrl-C closes it.
 
-`--port 0` (default) picks a free port; a requested port that is unavailable
-falls back with a note. `--remote-port` overrides the node's declared port.
+`--port 0` (default) picks a free port; a requested port that is unavailable is
+an error, never a silent substitute. `--remote-port` overrides the node's
+declared port.
 
 Refused for a node declared `preestablished: true` — there is nothing for this
 command to build.
