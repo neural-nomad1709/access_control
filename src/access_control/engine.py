@@ -15,6 +15,7 @@ observation layer, not a clever one.
 from __future__ import annotations
 
 import re
+import shlex
 import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -506,7 +507,37 @@ class Engine:
         timeout_s: int = 300,
     ) -> ExecResult:
         """Ad-hoc command -- the escape hatch used while diagnosing a failure."""
+        return self._run(
+            command, shell=shell, confirmed=confirmed, timeout_s=timeout_s, ad_hoc=True
+        )
+
+    def fetch_log(self, path: str, tail: int = 200) -> ExecResult:
+        """Read the tail of a remote log.
+
+        The command is built here from a path that cannot carry one (see
+        ``tail_command``), so a session's ``--ops`` scope on ad-hoc commands
+        does not apply to it.
+        """
+        command = tail_command(path, int(tail), windows=self.session.host.is_windows)
+        return self._run(command, timeout_s=180, ad_hoc=False)
+
+    def _run(
+        self,
+        command: str,
+        *,
+        shell: str | None = None,
+        confirmed: bool = False,
+        timeout_s: int = 300,
+        ad_hoc: bool,
+    ) -> ExecResult:
         try:
+            if ad_hoc and not getattr(self.session, "exec_permitted", True):
+                allowed = ",".join(self.session.allowed_operations)
+                raise PermissionRequired(
+                    f"ad-hoc commands are off in this session: it was restricted to "
+                    f"operations ({allowed}). Reconnect with --allow-exec to permit them:\n"
+                    f"    uv run ac connect {self.session.host_id} --ops {allowed} --allow-exec"
+                )
             self._authorize("ac_exec", {"command": command})
             if getattr(self.session, "agent_attached", False):
                 # The escape hatch must not re-open self-approval: a governed
@@ -660,7 +691,7 @@ class Engine:
             command = (
                 _windows_tail_command(pattern, spec.tail_lines)
                 if windows
-                else f"tail -n {spec.tail_lines} {pattern} 2>/dev/null"
+                else f"tail -n {spec.tail_lines} {_posix_glob(pattern)} 2>/dev/null"
             )
             out.append(self._collect_command(command, source=pattern, kind="file"))
 
@@ -954,8 +985,20 @@ def tail_command(pattern: str, lines: int, *, windows: bool) -> str:
     if windows:
         return _windows_tail_command(pattern, lines)
     return (
-        f"tail -n {int(lines)} {pattern} 2>/dev/null || "
-        f"echo 'no such file or not readable: {pattern}'"
+        f"tail -n {int(lines)} {_posix_glob(pattern)} 2>/dev/null || "
+        f"echo {shlex.quote('no such file or not readable: ' + pattern)}"
+    )
+
+
+def _posix_glob(pattern: str) -> str:
+    """Backslash-escape every shell metacharacter except the glob ones.
+
+    The pattern must still expand (``app*.log``), so it cannot simply be
+    quoted; escaping everything else means a path like ``x; rm y`` reaches
+    ``tail`` as one literal argument instead of a second command.
+    """
+    return "".join(
+        c if c.isalnum() or c in "*?[]/._-~" else "\\" + c for c in pattern
     )
 
 
@@ -970,7 +1013,7 @@ def _windows_tail_command(pattern: str, lines: int) -> str:
         f"Sort-Object LastWriteTime -Descending | Select-Object -First 1; "
         f"if ($m) {{ \"--- $($m.FullName) ---\"; "
         f"Get-Content -Path $m.FullName -Tail {lines} -ErrorAction SilentlyContinue }} "
-        f"else {{ \"no file matched {pattern}\" }}"
+        f"else {{ 'no file matched ' + {quote_single(pattern)} }}"
     )
 
 

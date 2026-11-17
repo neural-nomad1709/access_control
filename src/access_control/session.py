@@ -70,6 +70,10 @@ class Session:
     #: Operations the operator authorised for this session.  Empty means "any
     #: operation the catalog permits for this host".
     allowed_operations: tuple[str, ...] = ()
+    #: A session restricted by ``allowed_operations`` refuses ad-hoc commands
+    #: (``ac exec`` / ``run_command``) unless the operator also allowed them
+    #: with ``--allow-exec`` (F-02). Has no effect on an unrestricted session.
+    allow_exec: bool = False
     idle_timeout_s: int = DEFAULT_IDLE_TIMEOUT_S
     #: Absolute ceiling on the session's life, measured from connect and never
     #: refreshed by activity (F-04). Bounds a continuously-driven session that
@@ -119,6 +123,7 @@ class Session:
             route=self.route.describe(),
             hops=self.route.hop_labels(),
             allowed_operations=list(self.allowed_operations),
+            exec_permitted=self.exec_permitted,
         )
 
         # Stage 1: the bastion chain.  Nothing to fall back to if this fails --
@@ -618,6 +623,7 @@ class Session:
                 if self.max_lifetime_s else None
             ),
             "allowed_operations": list(self.allowed_operations),
+            "exec_permitted": self.exec_permitted,
             "authenticated_nodes": self.creds.known(),
             "tunnels": [
                 {"local": t.endpoint, "to": f"{t.dest_host}:{t.dest_port}", "active": t.active}
@@ -658,6 +664,11 @@ class Session:
         if self.degraded:
             return False
         return not self.allowed_operations or operation_id in self.allowed_operations
+
+    @property
+    def exec_permitted(self) -> bool:
+        """May ad-hoc commands (``ac exec`` / ``run_command``) run in this session?"""
+        return not self.allowed_operations or self.allow_exec
 
     # -- teardown ---------------------------------------------------------
 

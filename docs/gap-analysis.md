@@ -100,7 +100,7 @@ Tracked for triage in [../BugFixNchange.md](../BugFixNchange.md).
 | # | Gap | Detail | Severity |
 |---|---|---|---|
 | F-01 | `--confirm` does not prove a human approved | The flag is passed by the caller. An agent driving a live session can self-approve any gated operation | **High** for agent deployments |
-| F-02 | `ac exec` / `run_command` is not scoped by `--ops` | The session allow-list covers catalogue operations only. A "restricted" session still permits arbitrary ad-hoc commands, gated only by the deny-list | **High** |
+| F-02 | `ac exec` / `run_command` is not scoped by `--ops` | **Resolved 2026-11-16**: a `--ops` session refuses ad-hoc commands unless `--allow-exec`; the `ac logs` path injection found alongside is fixed. Tests in `test_exec_scope.py` | — |
 | F-03 | RDP launches are not audited | **Resolved 2026-11-16**: `ac rdp` records `RDP_LAUNCH` (node, endpoint, username, whether a credential was staged) in the session's trail, live or temporary. Tests in `test_cli_interactive_leg.py`, `test_daemon.py` | — |
 | F-04 | No absolute session lifetime | **Resolved 2026-09-01**: `ac connect --max-lifetime <secs>` bounds a session from connect regardless of activity; the watchdog closes it (`session.lifetime_timeout`). Tests in `test_session_lifetime.py` | — |
 | F-05 | `logging.level` is validated but never applied | The field is parsed, rejected if invalid, reported in `to_dict()` — and then ignored. Nothing filters records by level | Low, but misleading |

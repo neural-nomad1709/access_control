@@ -79,7 +79,7 @@ Ordered by expected impact. Severity assumes production use with an agent.
 | # | Risk | Likelihood | Impact | Mitigation available today |
 |---|---|---|---|---|
 | R-01 | **An agent self-approves a destructive operation.** `--confirm` is a flag the caller passes; nothing proves a human agreed at that moment | Medium | High | Scope the session with `--ops` to read-only operations and have the operator run destructive commands themselves |
-| R-02 | **A "restricted" session is not restricted.** `--ops` covers catalogue operations; `ac exec` remains available for any `ALLOWED`-class command, and any `CONFIRM`-class one with `--confirm` | Medium | High | Do not hand an agent a live session you would not hand a shell |
+| R-02 | ~~**A "restricted" session is not restricted.**~~ **Closed 2026-11-16**: a `--ops` session refuses `ac exec` unless `--allow-exec` is given (F-02) | — | — | Open agent sessions with `--ops` and without `--allow-exec` |
 | R-03 | **The nested Windows-to-Windows path is unproven.** Implemented, unit-tested, never run against real hardware | High (if used) | High | Verify against a live jump server before relying on it; prefer direct or single-hop WinRM until then |
 | R-04 | **The pure-Python NTLM provider steps around a corporate control.** `auto` selects it for every direct route | Medium | Medium–High (policy) | Prefer the bastion path; treat direct routes as a decision needing the NTLM policy owner's agreement; alert on `winrm.ntlm_provider: python` |
 | R-05 | **Trust-on-first-use host keys.** The default `accept-new` accepts an unknown key on first contact | Low | High | `AC_HOST_KEY_POLICY=strict` with `known_hosts` seeded out of band |
@@ -154,8 +154,8 @@ Design choices with consequences, not defects. Each is stated in
 | **Human-driven WinRM through an SSH bastion** | **Probably** | Implemented and unit-tested; prove it with `ac probe --deep` and a read-only operation first |
 | **Human-driven nested Windows→Windows** | **Not yet** | Unproven against real hardware (R-03) |
 | **Agent-driven read-only investigation** | **Yes** | Session scoped with `--ops` to read-only operations; operator present |
-| **Agent-driven change under supervision** | **Yes, with process** | Reviewed brief, `expect_hostname`, `--ops` scoping, operator runs the destructive step (R-01, R-02) |
-| **Agent-driven change unsupervised** | **No** | R-01 and R-02 have no technical mitigation today |
+| **Agent-driven change under supervision** | **Yes, with process** | Reviewed brief, `expect_hostname`, `--ops` scoping, operator runs the destructive step (R-01) |
+| **Agent-driven change unsupervised** | **No** | R-01 has no technical mitigation today |
 | **Fleet-wide campaigns (>10 hosts)** | **No** | One human-opened session per host is the ceiling |
 | **Regulated data (PCI/PHI/PII) in scope** | **Conditional** | R-06 has no technical control; requires a data-flow decision and narrow collectors |
 | **Compliance requiring tamper-evident recording** | **No** | R-09; needs Teleport or a PAM product |
@@ -193,8 +193,8 @@ Design choices with consequences, not defects. Each is stated in
 
 11. **An interactive approval gate** that cannot be satisfied by a flag — the
     single highest-value change for agent deployments (R-01).
-12. **Extend `--ops` scoping to `run_command`**, or add a session mode that
-    disables ad-hoc execution entirely (R-02).
+12. ~~**Extend `--ops` scoping to `run_command`** (R-02).~~ **Done 2026-11-16** —
+    `--ops` refuses ad-hoc commands unless `--allow-exec` (`test_exec_scope.py`).
 13. Verify the nested Windows path against real hardware and record the evidence
     (R-03).
 14. ~~An **absolute session lifetime** alongside the idle timeout (F-04).~~
@@ -216,7 +216,7 @@ Design choices with consequences, not defects. Each is stated in
 
 | If this happened | The verdict becomes |
 |---|---|
-| An interactive approval gate lands, and `--ops` covers `run_command` | Agent-driven change under light supervision becomes reasonable |
+| An interactive approval gate lands (`--ops` already covers `run_command`) | Agent-driven change under light supervision becomes reasonable |
 | The nested path is verified against real hardware | The flagship topology moves from "unproven" to supported |
 | CI, lint and a coverage gate land | Operational maturity moves from Adequate to Good |
 | A credential broker is added | The threat model changes fundamentally — nothing in this assessment carries over unreviewed |

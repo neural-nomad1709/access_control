@@ -364,7 +364,14 @@ def connect(
         None,
         "--ops",
         help="Comma-separated operations to authorise for this session. "
-        "Omit to allow every operation the catalog permits for this host.",
+        "Omit to allow every operation the catalog permits for this host. "
+        "A session restricted this way also refuses ad-hoc commands (ac exec) "
+        "unless --allow-exec is given.",
+    ),
+    allow_exec: bool = typer.Option(
+        False,
+        "--allow-exec",
+        help="With --ops, still permit ad-hoc commands (ac exec). No effect without --ops.",
     ),
     idle_timeout: int = typer.Option(
         1800, "--idle-timeout", help="Seconds of inactivity before the session closes (0 = never)"
@@ -431,6 +438,7 @@ def connect(
         session = build_session(
             host,
             allowed_operations=allowed,
+            allow_exec=allow_exec,
             idle_timeout_s=idle_timeout,
             max_lifetime_s=max_lifetime,
             agent_id=agent_id,

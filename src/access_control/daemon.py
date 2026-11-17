@@ -37,7 +37,7 @@ from .audit import AuditLog, record_rdp_launch
 from .config import Catalog, Inventory, load_all
 from .context import AgentIdentity
 from .credentials import CredentialStore, select_prompter
-from .engine import Engine, tail_command
+from .engine import Engine
 from .errors import AccessControlError, SessionError
 from .gatekeeper import Gatekeeper
 from .paths import ensure_dir, session_dir
@@ -499,8 +499,7 @@ class SessionServer:
     def do_fetch_log(self, path: str, tail: int = 200) -> dict[str, Any]:
         """Read the tail of a remote log without needing a whole operation."""
         self.session.touch()
-        command = tail_command(path, int(tail), windows=self.session.host.is_windows)
-        return self.engine.run_command(command, timeout_s=180).to_dict()
+        return self.engine.fetch_log(path, int(tail)).to_dict()
 
     def do_upload(self, local_path: str, remote_path: str) -> dict[str, Any]:
         self.session.touch()
@@ -610,6 +609,7 @@ def build_session(
     inventory: Inventory | None = None,
     catalog: Catalog | None = None,
     allowed_operations: tuple[str, ...] = (),
+    allow_exec: bool = False,
     idle_timeout_s: int | None = None,
     max_lifetime_s: int | None = None,
     agent_id: str | None = None,
@@ -670,6 +670,7 @@ def build_session(
             or os.environ.get("CLAUDE_CODE")
         ),
         allowed_operations=allowed_operations,
+        allow_exec=allow_exec,
         fallback_to_hop=fallback_to_hop,
     )
     if idle_timeout_s is not None:
