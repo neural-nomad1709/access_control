@@ -267,6 +267,19 @@ class TestOperationReport:
         # And the exact command to resume from, so the reader can act.
         assert "--start-at boom" in report
 
+    def test_failure_report_lists_the_steps_never_reached(self, make_session) -> None:
+        """F-09: the steps a failure skipped are part of what the reader must know."""
+        session = make_session("win01", responder=lambda c: ok(c, exit_code=1603))
+        report = Engine(session).run_operation("failing-op").report_markdown()
+        assert "**Not reached:** never-reached" in report
+
+    def test_a_resumed_run_does_not_list_steps_before_its_start(self, make_session) -> None:
+        session = make_session("win01", responder=lambda c: ok(c, exit_code=1603))
+        report = Engine(session).run_operation(
+            "failing-op", start_at="never-reached"
+        ).report_markdown()
+        assert "Not reached" not in report
+
     def test_report_is_written_to_disk_next_to_the_audit_trail(
         self, make_session, audit_log
     ) -> None:

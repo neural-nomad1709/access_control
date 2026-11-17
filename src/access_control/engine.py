@@ -115,6 +115,8 @@ class OperationOutcome:
     started_at: str = ""
     #: Where the shareable summary was written, if it was.
     summary_file: str | None = None
+    #: The step ids this run set out to execute (after --only / --start-at).
+    planned_steps: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -170,7 +172,7 @@ class OperationOutcome:
         skipped = []
         if self.stopped_at:
             reached = {s.step_id for s in self.steps}
-            skipped = [s.step_id for s in self.steps if s.step_id not in reached]
+            skipped = [step_id for step_id in self.planned_steps if step_id not in reached]
 
         failed = self.failed_step
         if failed is not None:
@@ -356,6 +358,7 @@ class Engine:
             )
 
         selected = self._select_steps(op, only_steps, start_at)
+        outcome.planned_steps = [step.id for step in selected]
         for step in selected:
             step_outcome = self.run_step(
                 op, step, variables, confirmed=confirmed, dry_run=dry_run

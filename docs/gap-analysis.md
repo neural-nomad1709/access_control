@@ -112,7 +112,7 @@ Tracked for triage in [../BugFixNchange.md](../BugFixNchange.md).
 |---|---|---|---|
 | F-07 | `ac tunnel --port` is silently ignored | **Resolved 2026-08-31**: both CLI paths pass `local_port` through; a busy port now raises `ConnectionFailed` rather than silently substituting another. Regression tests in `test_cli_tunnel.py` | — |
 | F-08 | `postcheck:` in a brief is parsed but never executed | **Resolved 2026-08-31**: runs via the same daemon handler as `preflight` after the operations succeed; failure fails the brief. Regression tests in `test_cli_brief_postcheck.py` | — |
-| F-09 | "Not reached" in an operation report is dead code | `report_markdown` computes `reached = {s.step_id for s in self.steps}` and then filters `self.steps` for ids *not* in that set — always empty. Steps skipped after a failure are never listed | Low |
+| F-09 | "Not reached" in an operation report is dead code | **Resolved 2026-11-16**: compared against the run's planned steps. Tests in `test_engine.py` | — |
 | F-10 | `ac shell` and `ac rdp` use the node's own `host`/`port` rather than the resolved route leg | **Resolved 2026-11-16**: both tunnel to the leg's declared endpoint (`interactive:` for RDP). Tests in `test_cli_interactive_leg.py` | — |
 | F-11 | `rules.max_duration_minutes` and `brief.window` are not enforced | Recorded and rendered only | Low (documented) |
 | F-12 | `PREFLIGHT` and `COMMAND` actions are not in `audit.ACTIONS` | **Resolved 2026-11-16**: both added; `test_audit_actions.py` guards the list against the source | — |
