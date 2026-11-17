@@ -61,7 +61,7 @@ inbound listener beyond loopback, no user database, and no privileged component.
 | T4 | Credential on a command line, visible in the process table | No credential is ever passed as an argument. `ac rdp --stage-credentials` is the one exception and is **off by default** | Only when staging is explicitly enabled |
 | T5 | Password sent to the wrong machine | Prompt labels name role, environment, identity, address and the hop it is reached through | Operator inattention |
 | T6 | Commands run on the wrong host after a stale/reused port forward | `preflight.check_identity` asks the machine its own name; `--expect-hostname` pins it | Only if `expect_hostname` is omitted (a validation warning) |
-| T7 | Agent escalating beyond intent | Five independent gates (§4); a compromised target cannot supply instructions | The `run-command` escape hatch, gated but powerful |
+| T7 | Agent escalating beyond intent | Five independent gates (§4); an agent's gated work waits for the operator's `:approve`; a compromised target cannot supply instructions | The `run-command` escape hatch, gated but powerful; a session opened without `--agent-id` relies on the client to declare an agent |
 | T8 | Catastrophic command (`mkfs`, `rm -rf /`, `Format-Volume`) | `safety.py` deny-list checked immediately before every send, no override for `BLOCKED` | A pattern list will not catch everything |
 | T9 | Man-in-the-middle on a hop | Host-key verification; a **changed** key is always fatal | An **unknown** key is accepted under the default `accept-new` |
 | T10 | Bastion reading the Windows payload it forwards | pypsrp `encryption="auto"` seals WinRM messages inside the SSH tunnel | The bastion still sees traffic volume and destination |
@@ -278,7 +278,7 @@ nor the target password.
 | `config/inventory.yaml`, `operations.yaml`, briefs, campaigns | **Yes** — topology and intent, no secrets |
 | Audit trail (`*.jsonl`) and session summary (`*.md`) | Secrets are scrubbed, but they contain **captured server output** — treat as internal |
 | Operation reports (`summary`) | Same: scrubbed of secrets, may contain log excerpts |
-| `transport.log` | Redacted, but may name hosts and ports |
+| `transport.log`, `errors.log` | Redacted, but may name hosts and ports. Both roll over at 5 MiB |
 
 `.gitignore` blocks `*.key`, `*.pem`, `*.ppk`, `*.pfx`, `*.p12`, `.env*`,
 `secrets*`, `credentials.json`, `*credentials.y*ml`, `*credentials.txt`,
@@ -297,6 +297,8 @@ the repository; the patterns above target credential *material* only.)
 | Token storage | `sessions/<host>.json`, created with `O_CREAT|O_TRUNC` at mode `0600` **before** anything is written |
 | Concurrency | One session per host id; `ac connect` refuses a second |
 | Idle timeout | 1800 s default, `--idle-timeout 0` disables. Watchdog polls every 15 s, emits `session.idle_timeout`, wipes credentials |
+| Absolute lifetime | `--max-lifetime N` (default `0` = none), measured from first connect and never refreshed. The watchdog emits `session.lifetime_timeout` and wipes credentials |
+| Approvals | An agent's gated request is held in the session process until the operator resolves it at the `ac connect` prompt; it lapses after 15 minutes. A prompt started inside an agent harness cannot resolve approvals |
 | Request limit | 8 MiB per request and per response |
 | Failure isolation | One bad request cannot kill the session; errors are returned, not raised |
 | Teardown | Tunnels → channels → hops, in reverse, then `creds.clear()` and `redact.clear()` |
@@ -408,8 +410,10 @@ Before pointing this at production:
 - [ ] Operations reviewed as code: every `host_ids: ['*']` justified, every
       `requires_permission: false` genuinely read-only.
 - [ ] Every brief sets `expect_hostname` and `success_criteria`.
-- [ ] `--ops` used to scope any session handed to an agent.
-- [ ] A bounded `--idle-timeout` (do not use `0`).
+- [ ] Every session handed to an agent opened with `--agent-id` and scoped with
+      `--ops` (without `--allow-exec` unless ad-hoc diagnosis is needed).
+- [ ] A bounded `--idle-timeout` (do not use `0`) and a `--max-lifetime` matching
+      the change window.
 - [ ] `auth.transport: credssp` used nowhere, or explicitly approved.
 - [ ] `ntlm_provider: python` / `AC_WINRM_PYTHON_NTLM` used nowhere, or explicitly
       approved with the NTLM policy owner.
@@ -429,9 +433,10 @@ Before pointing this at production:
    it is asking *you* to run `ac connect` — not asking for your password.
 2. **Run `ac verify <host> --expect-hostname <NAME>` before real work**, and again
    after anything that might have disturbed the path.
-3. **Preview before approving.** Approving `Install {{package}}` is not informed
-   consent; `ac preview` shows the rendered command.
-4. **Scope the session** with `--ops` when handing it to an agent.
+3. **Read before approving.** Approving `Install {{package}}` is not informed
+   consent. `:approve` lists the rendered commands an agent is waiting on; for
+   your own runs, `ac preview` shows them.
+4. **Open agent sessions with `--agent-id` and scope them with `--ops`.**
 5. **Prefer named operations over `run-command`.** Anything done twice belongs in
    the catalogue, where it gets expectations, diagnostics and review.
 6. **Close sessions when done** — `ac disconnect` wipes credentials immediately

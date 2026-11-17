@@ -102,7 +102,7 @@ structured results back. It never touches reach or custody directly.
 | `context.py` | `NetworkContext`, `AgentIdentity`, `LoggingConfig`, domain qualification. |
 | `credentials.py` | Prompting (terminal / Windows dialog) and the in-memory store. |
 | `audit.py` | Append-only JSONL trail, canonical actions, timeline, Markdown summary. |
-| `gatekeeper.py` | The seam for an external governance plane: authorize, hold for approval, scan output, mirror receipts. `NullGatekeeper` is the default and changes nothing. |
+| `gatekeeper.py` | The seam for governance: authorize, hold for approval, scan output, mirror receipts. `LocalGatekeeper`, every session's default, only holds an agent's approvals for the operator's `:approve`; `LighthouseGatekeeper` is the optional AgentLighthouse plane. |
 | `mcp_server.py` | `ac mcp <host>`: seven MCP tools over stdio, each a 1:1 pass-through to a session method. |
 | `redact.py` | Secret registry and scrubbing applied to everything that leaves the process. |
 | `logging_setup.py` | Routes library logging to a file; records unexpected tracebacks. |
@@ -259,7 +259,8 @@ ac run win-app01 install-package -p package=agent.msi --confirm
       ├─ session.permits(op)                    → PermissionRequired if not in --ops
       ├─ operation_variables()                  → missing param → ConfigError
       ├─ _check_permission()                    → gated & unconfirmed → refuse,
-      │                                            quoting the rendered commands
+      │                                            quoting the rendered commands;
+      │                                            from an agent → hold for :approve
       ├─ for each selected step:
       │    ├─ template.render()                 strict; unresolved → TemplateError
       │    ├─ safety.check()                    BLOCKED → refuse; CONFIRM → needs --confirm
@@ -355,7 +356,7 @@ There is no user database and no RBAC inside this tool. Authorization is the
 | 1 | **Reachability** | `routegraph` / `route` | A host with no declared route, an ambiguous route, or one crossing an environment boundary |
 | 2 | **Catalogue binding** | `Operation.applies_to(host)` | An operation whose `host_ids`/`tags` do not include this host |
 | 3 | **Session allow-list** | `ac connect --ops a,b` → `Session.permits`, `Session.exec_permitted` | Any operation not named at connect time, and ad-hoc commands unless `--allow-exec` |
-| 4 | **Permission gate** | `Operation.is_gated` + `--confirm` | A gated or destructive operation without explicit approval, quoting the rendered commands |
+| 4 | **Permission gate** | `Operation.is_gated` + `--confirm` from a human, or `:approve` for an agent (`LocalGatekeeper`) | A gated or destructive operation without explicit approval, quoting the rendered commands |
 | 5 | **Command deny-list** | `safety.check` on every rendered command | `BLOCKED` outright (no override); `CONFIRM` without confirmation |
 
 Plus two structural constraints that behave like authorization:
@@ -509,9 +510,9 @@ instead of a connection error.
 ╠═════════════════════════════════════════════════════════════════════╣
 ║ ZONE 4 — the agent (Claude) / any thin client                       ║
 ║   Sees: host ids, rendered commands, stdout/stderr, exit codes,     ║
-║   collected logs, audit summaries. Never sees a credential, and     ║
-║   cannot drive a prompt. Its interfaces are `uv run ac …` and the   ║
-║   seven MCP tools served by `ac mcp`.                               ║
+║   collected logs, audit summaries. Never sees a credential, cannot  ║
+║   drive a prompt, and cannot approve its own gated work. Its        ║
+║   interfaces are `uv run ac …` and the seven MCP tools of `ac mcp`. ║
 ╚═════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -697,7 +698,7 @@ expected by any buyer and are not reasons to choose this tool over another.
 | The target never instructs the agent | Instructions come only from reviewed YAML in the repository (§8) |
 | A degraded session authorizes nothing | Held at a hop, it withdraws every operation (§9) |
 | The engine never remediates | It observes and reports; the agent or operator decides (§6.2) |
-| Approval bound to the exact rendered command | One approval, one run, timeout is a denial (§8.1) |
+| An agent cannot approve its own work | Gated work waits for the operator's `:approve`, bound to the exact rendered commands; one approval, one run, timeout is a denial (§8.1) |
 | Signed, offline-verifiable receipts | Through the optional AgentLighthouse seam (§8.1) |
 | Honest tests | A real in-process SSH server with real forwarding and partial authentication, not mocks |
 
@@ -709,8 +710,9 @@ severity are in [production-readiness.md](production-readiness.md).
 1. **Ad-hoc commands are default-allow in an unrestricted session.** Without
    `--ops`, `run_command` runs anything the pattern list in `safety.py` does not
    match. A `--ops` session refuses it unless `--allow-exec`.
-2. **Agent-attached mode depends on how the session was opened** (§8.1).
-3. **The embedded governance plane is not wired into the CLI** (§8.1).
+2. **Agent detection without `--agent-id` relies on the client** declaring
+   itself from its environment (§8.1).
+3. **The embedded AgentLighthouse plane is not wired into the CLI** (§8.1).
 4. **Controls are client-side.** The daemon runs as the same OS user as the
    agent, so the session socket is a convenience boundary (§11).
 5. **Agent identity is a string the caller chooses.** Nothing attests to it.
@@ -718,11 +720,11 @@ severity are in [production-readiness.md](production-readiness.md).
 
 ---
 
-## 19. Product direction (planned, not built)
+## 19. Product direction
 
-> Nothing in this section exists in the code yet. It records the direction
-> proposed in the design review of 2026-11-09, which is still open for
-> decision, so that later changes can be judged against it.
+> The direction proposed in the design review of 2026-11-09, still open for
+> decision, so that later changes can be judged against it. The "Today" column
+> is current as of v0.2.1; part of the governance row has shipped.
 
 **Positioning.** Governed operations for agents on estates you cannot install
 into. The tool is the remote-action counterpart of a local sandbox: any agent
@@ -732,8 +734,8 @@ it, and it is not itself a harness.
 | Layer (§1.1) | Today | Planned change | Closes |
 |---|---|---|---|
 | Credential custody | Daemon runs as the operator's own user | Run the daemon under a separate OS identity so the agent cannot read the session descriptor or the daemon's memory | §18.3 item 4 |
-| Execution | Ad-hoc commands are default-allow behind a pattern list | Catalogue operations become the default door. Ad-hoc commands become default-deny: read-only commands recognised by argument grammar run, everything else is held for approval | §18.3 item 1 |
-| Governance | Agent-attached only when declared; approvals need AgentLighthouse, which the CLI cannot attach | Every session reached over the socket or MCP is treated as agent-driven. A built-in approval in the operator's window makes a plain install safe. `ac connect` can attach the AgentLighthouse plane | §18.3 items 2, 3 |
+| Execution | Ad-hoc commands are default-allow behind a pattern list in an unrestricted session; a `--ops` session refuses them unless `--allow-exec` | Catalogue operations become the default door. Ad-hoc commands become default-deny: read-only commands recognised by argument grammar run, everything else is held for approval | §18.3 item 1 |
+| Governance | **Shipped in v0.2.1:** a built-in approval in the operator's window (`LocalGatekeeper`, `:approve`); requests from a client inside an agent harness are treated as an agent's. Still to do: treat every session reached over the socket or MCP as agent-driven, and let `ac connect` attach the AgentLighthouse plane | The remaining two | §18.3 items 2, 3 |
 | Agent surface | CLI with `--json`; MCP over stdio | MCP over stdio and HTTP, plus setup guides for agents other than Claude | §18.3 item 6 |
 | Evidence | JSONL trail; signed receipts via the seam | Add OpenTelemetry spans; keep both existing records | — |
 

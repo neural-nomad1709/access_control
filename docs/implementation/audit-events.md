@@ -72,7 +72,8 @@ name that is missing here.
 | `session.open` | `SESSION_START` | `Session.connect` | `route`, `hops[]` (id, role, source, address, channel, preestablished, context, domain), `allowed_operations[]`, `exec_permitted`, `client_host`, `client_os`, `pid`, `detail` (= route) |
 | `session.degraded` | — | `Session._degrade_to_hop` | `held_at`, `reason`, `note` |
 | `session.recovered` | — | `Session.retry_target` | `host_id` |
-| `session.idle_timeout` | — | `SessionServer._watchdog` | `idle_s` |
+| `session.idle_timeout` | — | `SessionServer._watchdog` | `idle_s`, `lifetime_s` |
+| `session.lifetime_timeout` | — | `SessionServer._watchdog`, when `--max-lifetime` is reached | `idle_s`, `lifetime_s` |
 | `config.reload` | — | `SessionServer.do_reload` | `operations[]`, `added[]`, `removed[]`, `warnings[]` |
 | `session.close` | `SESSION_END` | `AuditLog.close` | `status`, `detail` (= status), plus the whole summary: `elapsed_s`, `records`, `steps_run`, `steps_ok`, `steps_failed`, `errors`, `blocked`, `log_file` |
 
@@ -105,6 +106,7 @@ name that is missing here.
 | `preflight` | `PREFLIGHT` | `SessionServer.do_preflight` | `detail` (`N check(s), M blocker(s)`), `checks[]` (name, passed, detail, severity, duration_s, remedy) |
 | `permission` | `PERMISSION_REQUEST` | `Engine._check_permission` | `operation_id`, `gated`, `confirmed`, `granted`. `result: BLOCKED` when refused. For an agent's request: `request_id`, and `result: PENDING` while held, `SUCCESS` once approved, `BLOCKED` when denied or lapsed |
 | `approval.resolved` | — | `operator_shell._resolve_approval` | `request_id`, `decision` (`allow` \| `deny`), `resolved_by` |
+| `session.tainted` | — | `Engine._scan_text`, integrated mode only | `findings[]`, `detail`. Hostile content in collected output; every operation gates from then on |
 | `operation.start` | — | `Engine.run_operation` | `operation_id`, `params{}`, `confirmed`, `dry_run`, `steps[]` |
 | `step.start` | — | `Engine.run_step` | `operation_id`, `step_id`, `desc`, `shell`, `command` (redacted), `dry_run` |
 | `step.end` | `SCRIPT_EXECUTE` | `Engine.run_step` | `operation_id`, `step_id`, `ok`, `exit_code`, `duration_s`, `expectation_reason`, `stdout_chars`, `collected`, `hint`, `detail` (`op/step`) |

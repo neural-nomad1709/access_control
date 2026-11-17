@@ -116,14 +116,19 @@ the target. `--deep` is the only honest test of the jump → target leg.
 
 ```powershell
 # Terminal 1 — yours. Prompts per hop. Leave it open.
-uv run ac connect <host> --ops install-package,windows-health --idle-timeout 7200
+uv run ac connect <host> --ops install-package,windows-health --idle-timeout 1800 --max-lifetime 7200
+#   add --agent-id claude/<ticket> if an agent will drive terminal 2
 
 # Terminal 2 — you, or the agent
 uv run ac verify <host> --expect-hostname <ITS-REAL-NAME>
-uv run ac brief run config\briefs\tonight.yaml --confirm
+uv run ac brief run config\briefs\tonight.yaml --confirm   # an agent omits --confirm
 uv run ac timeline <session-id>
 uv run ac disconnect <host>
 ```
+
+When an agent drives terminal 2, each gated step is held and terminal 1 prints
+`approval requested: apr-…` with the commands. Read them and answer `:approve
+<id>` or `:deny <id>` there.
 
 Production discipline, in priority order:
 
@@ -134,11 +139,13 @@ Production discipline, in priority order:
 2. **Scope the session with `--ops`.** It then refuses anything else, even if
    `operations.yaml` is edited underneath it, including ad-hoc `ac exec` unless
    you also pass `--allow-exec`.
-3. **Preview before approving.** `ac preview` renders the real commands.
+3. **Read before approving.** `ac preview` renders the real commands for your
+   own runs; `:approve` lists them for an agent's.
 4. **Use `--start-at` after a failure**, not a full re-run — repeating a
    destructive step is sometimes actively harmful.
-5. **Set a bounded `--idle-timeout`.** `0` means an authenticated session with
-   live credentials lives until the window closes.
+5. **Set a bounded `--idle-timeout` and a `--max-lifetime`.** `0` idle means an
+   authenticated session with live credentials lives until the window closes;
+   the lifetime ceiling holds even while the session is busy.
 6. **Disconnect explicitly.** It prints the final status and wipes credentials
    immediately.
 
@@ -164,7 +171,8 @@ current ceiling on fan-out: a human has to open each session. See
 - **Unattended or scheduled runs.** An operator must be present, because nothing
   is stored. Use a PAM product or a vaulted service account if you need 03:00
   patching with nobody watching.
-- **Multi-user approval workflow.** One operator, one session, one approval.
+- **Multi-user approval workflow.** One operator, one session, one approver: the
+  person at the `ac connect` prompt.
 - **Idempotency.** Running an operation twice runs it twice.
 
 ---
@@ -192,7 +200,9 @@ they drop into a SIEM without a transform step.
 | Signal | Filter | Why |
 |---|---|---|
 | Blocked command | `action == "COMMAND_BLOCKED"` | An agent or operator proposed something on the never-run list |
-| Refused approval | `action == "PERMISSION_REQUEST" && result == "BLOCKED"` | A gated operation was attempted without approval |
+| Refused approval | `action == "PERMISSION_REQUEST" && result == "BLOCKED"` | A gated operation was attempted without approval, or an agent's request was denied or lapsed |
+| Approval granted | `event == "approval.resolved" && decision == "allow"` | Who let an agent's gated work run, for the change record |
+| Session hit its lifetime | `event == "session.lifetime_timeout"` | The `--max-lifetime` ceiling closed a session |
 | Wrong host | `event == "preflight" && result == "FAILURE"` with a failing `target.identity` check | The single most dangerous failure mode |
 | Bastion bypass | `event == "winrm.direct"` | A route connected with no bastion at all |
 | NTLM policy bypass | `event == "winrm.ntlm_provider" && provider == "python"` | The pure-Python provider stepped around "Restrict NTLM outgoing" |
@@ -434,6 +444,7 @@ as a warning — worth knowing before starting a twenty-step run.
 | What is declared | `ac hosts`, `ac routes`, `ac routes <host>`, `ac ops` |
 | What actually answers | `ac probe <host> --deep` |
 | Open / close a session | `ac connect <host>` / `ac disconnect <host>` |
+| Let an agent's held step run | `:approve <id>` (or `:deny <id>`) in the `ac connect` window |
 | Prove the right machine | `ac verify <host> --expect-hostname <NAME>` |
 | See what would run | `ac preview <host> <op> -p k=v` |
 | Do the work | `ac run <host> <op> -p k=v --confirm [--start-at <step>]` |

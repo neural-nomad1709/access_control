@@ -31,8 +31,12 @@ in the catalogue and be permitted on that host, or the brief is rejected.
 2.  VALIDATE   ac brief validate my-brief.yaml     <- no network, do this early
 3.  REVIEW     ac brief show my-brief.yaml         <- a human reads and approves
 4.  CONNECT    ac connect <host>                   <- operator's own terminal
+               (add --agent-id <id> if an agent will run it)
 5.  VERIFY     ac verify <host> --expect-hostname  <- live, right machine
-6.  RUN        ac brief run my-brief.yaml --confirm
+6.  RUN        ac brief run my-brief.yaml --confirm   (a human)
+               ac brief run my-brief.yaml             (an agent: each gated step
+                                                       waits for :approve in the
+                                                       ac connect window)
 7.  REPORT     success criteria + operation summaries + audit trail
 ```
 
@@ -194,7 +198,7 @@ the agent and the reader:
 |---|---|
 | `reboot_allowed` | **Yes.** If any listed operation contains a step that could restart the host, the brief is refused at validation time, with the operation named |
 | `stop_on_first_failure` | **Yes**, by `ac brief run` — after each step's own `on_failure` has had its say |
-| `confirm_destructive` | No. Gating comes from the catalogue plus `--confirm`; setting this `false` only produces a validation warning |
+| `confirm_destructive` | No. Gating comes from the catalogue plus `--confirm` (or `:approve` for an agent); setting this `false` only produces a validation warning |
 | `max_duration_minutes` | **Yes**, by `ac brief run` — once the ceiling has passed no further operation is started and the brief fails. A running operation is not interrupted. `0` = no ceiling |
 | `allow_diagnostic_commands` | No. An instruction to the agent |
 | `allow_unlisted_operations` | No. An instruction to the agent |
@@ -297,7 +301,8 @@ campaign:
   title: QA fleet read-only health sweep
   change_ref: DEMO-HEALTH
   max_parallel: 8        # how many hosts to drive at once
-  confirm: false         # pre-approve gated operations fleet-wide
+  confirm: false         # a human's pre-approval of gated operations fleet-wide;
+                         # from an agent it carries no weight
 
 targets:
   - host: win-target01-dev            # overrides the brief's own `host:`
@@ -337,10 +342,13 @@ done through `uv run ac …` — that is the only interface.
 1. **Read the whole brief before acting.**
    `uv run ac brief validate <path> --json` returns it validated, with `rules`
    and `must_not`; `ac brief show <path>` renders it for a human.
-2. **Show the rendered commands to the operator and get explicit approval**
-   before running anything gated. `uv run ac preview <host> <operation> -p k=v`.
-   Approving `apt-get install -y {{package}}` is not informed consent; the
-   preview shows the real command.
+2. **Get the operator's approval for anything gated, through the tool.** Run
+   the operation; if it is gated it is held, and the refusal gives a request id.
+   Tell the operator the id and why the change is needed, then wait for them to
+   answer `:approve <id>` in their `ac connect` window, and re-run. Never pass
+   `--confirm` to skip this: it carries no weight from an agent.
+   `uv run ac preview <host> <operation> -p k=v` shows the rendered commands
+   beforehand.
 3. **Verify the connection first.**
    `uv run ac verify <host> --expect-hostname <NAME>` with the brief's
    `expect_hostname`. If `ok` is false, stop and relay the failing checks and
@@ -377,9 +385,12 @@ uv run ac brief show      config\briefs\example-windows-install.yaml
 # In the window — your own terminal, prompts per hop
 uv run ac connect win-target02 --ops install-package,windows-health
 
-# Another terminal (or an agent, running the same commands)
+# Another terminal
 uv run ac verify win-target02 --expect-hostname WIN-TARGET02
 uv run ac brief run config\briefs\example-windows-install.yaml --confirm
+
+# If an agent runs it instead: connect with --agent-id claude/<ticket>, the
+# agent runs `ac brief run` without --confirm, and you :approve each held step
 
 # Afterwards
 uv run ac timeline <session-id>

@@ -25,8 +25,9 @@ There are two ways AgentLighthouse attaches to access_control:
 | **Embedded gatekeeper** (`LighthouseGatekeeper` behind the `Gatekeeper` seam) | Inside `ac`: default-deny tool policy, out-of-band human approval, output scanning with taint, every audit action mirrored into a signed ledger | **No.** It is built and tested, but no `ac` command constructs it yet ([§6](#6-plan)) |
 
 The seam is one interface, `Gatekeeper` (`src/access_control/gatekeeper.py`).
-Its default, `NullGatekeeper`, changes nothing, which is why the standalone
-product behaves exactly as if the integration did not exist.
+The standalone product uses `LocalGatekeeper`: no policy, no scanning, no
+receipts, and agent approvals held in the session for the operator's `:approve`.
+Nothing in it depends on AgentLighthouse.
 
 ---
 
@@ -114,8 +115,7 @@ AgentLighthouse renamed its packages in 0.4.0. The import names and the `al`,
 | `agentlighthouse-verify` | `al-verify` | `verify/` | `al_verify` |
 | `agentlighthouse-governance` | `al-governance` | `governance/` | `al_governance` |
 
-The phase reports in [§7](#7-history) were written before the rename and use the
-old names.
+[history.md](history.md) was written before the rename and uses the old names.
 
 ---
 
@@ -161,23 +161,13 @@ tested library:
    verify the resulting ledger with `al-verify`.
 4. **Developing against a local AgentLighthouse checkout.** A documented, tested
    command for trying unreleased AgentLighthouse work without editing the pin.
+5. **A live test against the real `al mcp proxy` process.** Today's acceptance
+   test wires the proxy's filter in-process.
 
 ---
 
 ## 7. History
 
-The integration was built in phases. These reports record what each phase
-found and decided; they are not current instructions.
-
-| Report | Phase |
-|---|---|
-| [00-context.md](00-context.md) | Phase R: context load, and the original packaging finding |
-| [01-phase-0-report.md](01-phase-0-report.md) | Phase 0: hygiene |
-| [02-phase-al-0-report.md](02-phase-al-0-report.md) | Phase AL-0: AgentLighthouse pre-work |
-| [03-phase-1-report.md](03-phase-1-report.md) | Phase 1: evidence (the Gatekeeper seam and the signed ledger) |
-| [04-phase-2-report.md](04-phase-2-report.md) | Phase 2: enforcement |
-| [05-phase-3-report.md](05-phase-3-report.md) | Phase 3: the mediated agent path |
-| [06-phase-4-report.md](06-phase-4-report.md) | Phase 4: governance |
-
-The last commit before any of this work is tagged
-`pre-agentlighthouse-integration`.
+[history.md](history.md): the phases that built the integration, the decisions
+still in force, and what is still open from them. The last commit before any of
+this work is tagged `pre-agentlighthouse-integration`.

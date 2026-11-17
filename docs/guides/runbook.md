@@ -90,7 +90,8 @@ corp\svc_deploy@win-app01.corp.net [win-target02] >
 
 The prompt always names the machine the next command reaches, and anything you
 type runs there through the same audited channel. `:help` lists its own commands
-(`:status`, `:where`, `:route`, `:retry`, `:timeout <secs>`, `:exit`). `cd` is
+(`:status`, `:where`, `:route`, `:retry`, `:timeout <secs>`, `:approve`,
+`:deny`, `:exit`). `cd` is
 remembered between commands on POSIX hosts; nothing else is, because each command
 opens its own channel.
 
@@ -99,7 +100,9 @@ Options worth knowing:
 ```powershell
 uv run ac connect win-target02 --ops install-package,windows-health
 uv run ac connect win-target02 --ops windows-health --allow-exec   # also permit ac exec
+uv run ac connect win-target02 --agent-id claude/INC0001234   # Claude will drive it
 uv run ac connect win-target02 --idle-timeout 7200      # 0 = never expire
+uv run ac connect win-target02 --max-lifetime 3600      # closes after 1 h, busy or not
 uv run ac connect win-target02 --no-shell               # hold it open with no prompt
 uv run ac connect win-target02 --no-fallback            # fail rather than hold at a hop
 ```
@@ -107,9 +110,11 @@ uv run ac connect win-target02 --no-fallback            # fail rather than hold 
 `--ops` restricts the session to those operations. Belt and braces: the session
 then refuses anything else even if `operations.yaml` is edited underneath it. It
 also refuses ad-hoc `ac exec` commands unless you add `--allow-exec`; `ac logs`
-and what you type at the prompt are unaffected.
-Default idle timeout is 30 minutes; when it expires the credentials are wiped and
-you reconnect.
+and what you type at the prompt are unaffected. `--agent-id` names the agent in
+the audit trail and makes the agent's `--confirm` carry no weight: its gated
+work waits for your `:approve` (Step 7). Default idle timeout is 30 minutes;
+`--max-lifetime` adds a ceiling that activity does not reset. When either
+expires the credentials are wiped and you reconnect.
 
 **If the last leg fails**, the session is not thrown away. It is held at the last
 hop that did authenticate — marked `· FALLBACK` in the prompt — so you can
@@ -159,6 +164,22 @@ uv run ac run win-target02 install-package -p package_share='D:\packages' -p pac
 `--confirm` approves a gated (destructive) operation — without it you are asked.
 `--dry-run` renders and runs nothing. `--start-at <step>` resumes a partly-done
 operation instead of repeating work; `--only <steps>` runs a subset.
+
+**When Claude does the work.** Open the session with `--agent-id` (for example
+`uv run ac connect win-target02 --agent-id claude/INC0001234`). When Claude
+runs a gated operation, nothing runs: your `ac connect` window prints
+
+```
+approval requested: apr-3f9a1c  install-package  (spiffe://access-control/agent/…)
+  [install] msiexec /i "D:\packages\agent-1.4.2.msi" /qn …
+  :approve apr-3f9a1c   or   :deny apr-3f9a1c
+```
+
+Read the commands, type `:approve apr-3f9a1c` (or `:deny`) in that window, and
+Claude re-runs. One approval covers one run of exactly those commands; a
+request you ignore lapses after 15 minutes and counts as a denial. Claude's own
+`--confirm` does not count, even if it passes one. `:approve` on its own lists
+everything waiting.
 
 **A whole job, from a brief** — this is the real workflow for a change window:
 
@@ -696,12 +717,26 @@ and patch runs need 1800–5400.
 
 ## The session expired
 
-Default idle timeout is 30 minutes. Credentials are wiped; there is nothing to
-recover. Reconnect:
+Default idle timeout is 30 minutes; a `--max-lifetime` set at connect closes the
+session when it is reached, however busy it is. Credentials are wiped; there is
+nothing to recover. Reconnect:
 
 ```powershell
-uv run ac connect <host> --idle-timeout 7200   # or 0 for no timeout
+uv run ac connect <host> --idle-timeout 7200   # or 0 for no idle timeout
 ```
+
+---
+
+## "held for out-of-band approval (request apr-…)"
+
+An agent asked for a gated operation or command on a session it drives. Nothing
+ran. In the `ac connect` window, `:approve` lists what is waiting with the exact
+commands; `:approve <id>` lets it run once, `:deny <id>` refuses it. The agent
+then re-runs. A request nobody answers lapses after 15 minutes and must be asked
+for again.
+
+If `:approve` says the prompt was started inside an agent harness, the session
+was opened from Claude's own terminal. Close it and open it from yours.
 
 The audit trail from the expired session is complete and still on disk.
 

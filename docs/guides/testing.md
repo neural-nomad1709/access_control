@@ -269,9 +269,12 @@ coverage:
 | Gap | Consequence |
 |---|---|
 | No WinRM/PSRP server double | `transport/winrm.py`, the nested leg, NTLM provider selection and wedge recovery are exercised only at unit level |
-| No CI pipeline in the repository | The suite runs when someone remembers. There is no `.github/workflows`, no pre-commit hook, and no coverage gate |
 | No coverage threshold enforced | `--cov` is available but nothing fails on a drop |
 | No linter or type checker configured | No ruff/mypy config, despite the code being fully annotated |
-| No RDP path test | `transport/interactive.py` is Windows-only and launches a GUI |
+| No test launches `mstsc` | `transport/interactive.py` is Windows-only and opens a GUI; the CLI around it is tested up to that boundary |
+| One test can fail by chance | `test_same_second_runs_get_distinct_trace_ids`: 50 ids with a 6-hex suffix collide about once in 14 000 runs |
 
-These are tracked in [../gap-analysis.md](../gap-analysis.md).
+CI (`.github/workflows/ci.yml`) runs the suite on Ubuntu and Windows, in both
+the standalone and the integrated mode, on every push to `main` and every pull
+request. These gaps are tracked in
+[../../BugFixNchange.md](../../BugFixNchange.md#3-open).

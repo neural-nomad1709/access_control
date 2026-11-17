@@ -27,6 +27,7 @@ is a better answer, and each section says which.
 | 5c | [Campaigns — one brief, many hosts](#5c-campaigns--one-brief-many-hosts) | Ansible inventory groups, a `for` loop, doing it by hand |
 | 6 | [Failure diagnosis](#6-failure-diagnosis) | Reading logs by hand |
 | 7 | [Command safety policy](#7-command-safety-policy) | `sudoers`, PAM command filtering, nothing |
+| 7b | [Operator approval for agents](#7b-operator-approval-for-agents) | PAM checkout approval, a chat message saying "ok" |
 | 8 | [Audit trail and identity](#8-audit-trail-and-identity) | Teleport session recording, PAM, `script(1)` |
 | 9 | [Session daemon](#9-session-daemon) | `ssh` ControlMaster, `tmux`, re-authenticating |
 | 9b | [The operator prompt and hop fallback](#9b-the-operator-prompt-and-hop-fallback) | Opening a second connection and retyping everything |
@@ -666,7 +667,7 @@ asked.
 | Tier | Behaviour | Examples |
 |---|---|---|
 | **BLOCKED** | Refused outright. No confirmation overrides it. | `Format-Volume`, `mkfs`, `dd of=/dev/sda`, `rm -rf /`, `Disable-PSRemoting` |
-| **CONFIRM** | Needs explicit confirmation, forcing the agent to ask the operator | `Restart-Computer`, `rm`, `chmod`, `Stop-Service`, `msiexec /x`, `apt install` |
+| **CONFIRM** | Needs explicit confirmation: `--confirm` from a human, the operator's `:approve` for an agent (§7b) | `Restart-Computer`, `rm`, `chmod`, `Stop-Service`, `msiexec /x`, `apt install` |
 | **ALLOWED** | Runs | `Get-Service`, `df -k`, `tail`, `hostname` |
 
 Whole-line `#` comments are stripped before classification — prose describing
@@ -700,6 +701,47 @@ catches everything.
 
 ---
 
+## 7b. Operator approval for agents
+
+### What it does
+
+A flag the caller passes proves nothing about a human. So when an agent asks for
+a gated operation or a `CONFIRM`-class command, nothing runs. The request is
+held in the session, the `ac connect` window prints it with the exact commands,
+and the operator answers there:
+
+```
+approval requested: apr-3f9a1c  install-package  (spiffe://access-control/agent/claude-inc0001234)
+  [install] msiexec /i "D:\packages\agent-1.4.2.msi" /qn /l*v "C:\Windows\Temp\agent.log"
+  :approve apr-3f9a1c   or   :deny apr-3f9a1c
+```
+
+One approval covers one run of exactly those commands. A request nobody answers
+lapses after 15 minutes and counts as a denial. Every request and every answer
+is in the audit trail (`PERMISSION_REQUEST`, `approval.resolved`).
+
+A request is an agent's when the session was opened with `--agent-id` (or
+`AC_AGENT_ID`), or when the `ac` command that sent it runs inside an agent
+harness. A human running `ac run --confirm` from a plain terminal is not held.
+
+### Honest framing
+
+The approval belongs to whoever is at the `ac connect` prompt, so a prompt that
+was itself started inside an agent harness cannot approve anything. On a session
+opened *without* `--agent-id`, telling an agent from a human relies on the
+client declaring itself, which a deliberately evasive agent could avoid. Open
+agent sessions with `--agent-id`.
+
+### Compared to the market
+
+| Approach | Trade-off |
+|---|---|
+| **PAM checkout approval** | A second person approves access before the session starts. Stronger separation of duties; approves access, not individual commands. Needs the platform. |
+| **Asking in chat** | The agent says "shall I?" and you type "yes". Nothing binds that yes to what then runs. |
+| **This tool** | Per-command, bound to the rendered text, no infrastructure. One approver: the operator at the prompt. |
+
+---
+
 ## 8. Audit trail and identity
 
 ### What it does
@@ -712,8 +754,8 @@ Every action is one JSON object, written and `fsync`ed immediately:
  "source": "JumpServer01", "target": "linux-app01", "result": "SUCCESS"}
 ```
 
-Sixteen action types cover connect, authenticate, execute, transfer, collect,
-block, and terminate. Identity fields use canonical spellings so the trail drops
+Eighteen action types cover connect, authenticate, execute, transfer, collect,
+approve, block, RDP launch and terminate. Identity fields use canonical spellings so the trail drops
 into a SIEM without a transform step.
 
 **Per-run identity.** `AGT-<date>-<suffix>` per agent instance, `SES-<suffix>`
@@ -734,7 +776,9 @@ is precisely when telling them apart matters. Name a run explicitly with
 13:54:44  SESSION_END          local -> aix-via-hop  closed
 ```
 
-Configurable location, level and retention, with automatic pruning.
+Configurable location and retention, with automatic pruning. The library log
+(`transport.log`) follows `logging.level` and, like `errors.log`, rolls over at
+5 MiB.
 
 ### Compared to the market
 
@@ -817,7 +861,8 @@ appuser@10.0.0.29 [app-stg01-bastion] $
 operator@bastion-staging.example.net [bastion-staging · FALLBACK] $
 ```
 
-`:help`, `:status`, `:where`, `:route`, `:retry`, `:timeout <secs>`, `:exit`.
+`:help`, `:status`, `:where`, `:route`, `:retry`, `:timeout <secs>`, `:approve`,
+`:deny`, `:exit`.
 Anything else runs on that machine through the same audited channel with the same
 deny-list — `CONFIRM` is satisfied because a human typed it, but `BLOCKED` still
 holds. `cd` is remembered between commands on POSIX hosts; nothing else is,
@@ -871,9 +916,12 @@ the checks you run *while* holding a session.
 
 ## 10. Interactive handoff
 
-`ac rdp <node>` forwards 3389 through the chain and launches `mstsc`.
-`ac shell <node>` opens an interactive SSH shell. `ac tunnel <node>` gives you the
-forward for any other client.
+`ac rdp <node>` forwards the node's RDP endpoint through the chain and launches
+`mstsc`. `ac shell <node>` opens an interactive SSH shell. `ac tunnel <node>`
+gives you the forward for any other client. All three dial the address the route
+declares for that hop; when that address is a forward you already started
+(`preestablished: true`), `ac rdp` and `ac shell` use it as it is and
+authenticate nothing. Every RDP launch is recorded as `RDP_LAUNCH`.
 
 **Credentials default to *not* being staged** — `mstsc` prompts, which is exactly
 the manual-entry model. Staging via `cmdkey` is opt-in, because it puts the
@@ -929,6 +977,7 @@ That works until someone writes a debug line.
 | Install on targets | none | none | none (Python for modules) | none | agent or proxy | connector |
 | Validated work order | **✓** | ✗ | partial | ✗ | ✗ | approval workflow |
 | Wrong-host guard | **✓** | ✗ | ✗ | ✗ | n/a (cert-bound) | n/a (brokered) |
+| Agent cannot approve its own change | **✓** per command | ✗ | ✗ | ✗ | access requests | checkout approval |
 | Infrastructure needed | none | none | none | none | proxy cluster | vault + PSM |
 | Multi-hop chains | declared, validated | manual | `ProxyJump` string | saved tunnels | native | native |
 | Windows automation | WinRM/PSRP | ✗ | WinRM | ✗ | limited | via connector |
@@ -940,7 +989,7 @@ That works until someone writes a debug line.
 | Automatic failure diagnosis | **✓** | ✗ | partial | ✗ | ✗ | ✗ |
 | Command policy | advisory | ✗ | ✗ | ✗ | RBAC | **enforced** |
 | Audit trail | structured JSON | ✗ | task logs | ✗ | **recorded** | **recorded** |
-| Tamper-evident audit | ✗ | ✗ | ✗ | ✗ | **✓** | **✓** |
+| Tamper-evident audit | ✗ (✓ with AgentLighthouse) | ✗ | ✗ | ✗ | **✓** | **✓** |
 | Unattended / scheduled | ✗ | ✓ | **✓** | ✗ | ✓ | ✓ |
 | Agent-friendly output | **✓** | ✗ | partial | ✗ | ✗ | ✗ |
 | Cost | free | free | free/paid | free | paid | paid |
@@ -999,8 +1048,9 @@ Known, and none of them hidden elsewhere in the docs.
 8. **The command policy is a pattern list.** It will not catch everything.
 9. **`.ppk` keys need conversion** — Paramiko cannot read PuTTY's format.
 10. **No RBAC, no SSO, no multi-user approval workflow.** One operator, one
-    session. A human's `--confirm` is taken at its word; an agent's is not,
-    and its gated work waits for `:approve` at the operator prompt.
+    session, one approver. A human's `--confirm` is taken at its word; an
+    agent's is not, and its gated work waits for `:approve` at the operator
+    prompt (§7b).
 11. **An unrestricted session allows ad-hoc commands.** Without `--ops`,
     `ac exec` is gated only by the deny-list. With `--ops` it is refused unless
     `--allow-exec` is also given.

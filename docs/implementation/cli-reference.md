@@ -94,7 +94,7 @@ on a loopback socket, and gives you a prompt on the host.
 | `--max-lifetime N` | `0` | Absolute seconds before the session closes regardless of activity, measured from connect. Bounds a continuously driven session the idle timer alone would keep open. `0` = no ceiling |
 | `--no-shell` | off | Hold the session open with no prompt — for a service wrapper, or a log you want kept clean. Close with Ctrl-C |
 | `--no-fallback` | off | Fail outright if the target leg fails, instead of holding the session at the last hop that authenticated |
-| `--agent-id ID` | generated per run | Agent id recorded on every audit line for this session, e.g. a per-window name (`AGT-web01`) or a batch tag. Overrides `AC_AGENT_ID` |
+| `--agent-id ID` | generated per run | Agent id recorded on every audit line for this session, e.g. a per-window name (`AGT-web01`) or a batch tag. Overrides `AC_AGENT_ID`. Either one marks the session as agent-driven: `--confirm` then carries no weight and gated work waits for `:approve` |
 
 Refuses to start if a session for that host already exists. Warns if this is not
 an interactive terminal.

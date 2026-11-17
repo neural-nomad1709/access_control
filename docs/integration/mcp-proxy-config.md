@@ -84,10 +84,12 @@ verifiable offline with `al-verify`.
   receipts use: `spiffe://access-control/agent/<agent-id>`, lowercased and
   sanitized to `[a-z0-9._-]` (see `gatekeeper.spiffe_actor`). Keep the policy
   file, the `--actor`, and `--agent-id` consistent, or the identity denies.
-- **Two planes, one workload.** `ac mcp` runs a `NullGatekeeper` by default (it
-  only wraps the socket); the governance decisions are the proxy's job. Running
-  ac *itself* under a `LighthouseGatekeeper` as well (Phases 1–2) is the
-  belt-and-braces posture: mediation at the door, enforcement at the engine.
-- **Read-only first.** The Phase 3 acceptance target is a read-only catalogued
-  operation end to end. Grant write operations in the policy only once the
-  approval flow is exercised for that identity.
+- **Two planes, one workload.** `ac mcp` only wraps the socket; the session it
+  attaches to keeps its own gatekeeper (`LocalGatekeeper` from `ac connect`,
+  which holds gated work for the operator's `:approve`). Policy, scanning and
+  receipts are the proxy's job. Running ac *itself* under a
+  `LighthouseGatekeeper` as well is the belt-and-braces posture: mediation at
+  the door, enforcement at the engine.
+- **Read-only first.** Start with a read-only catalogued operation end to end.
+  Grant write operations in the policy only once the approval flow is exercised
+  for that identity.
