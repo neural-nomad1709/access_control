@@ -38,9 +38,10 @@ against a mock.
 | `test_gatekeeper.py` | 14 | The `Gatekeeper` seam: `NullGatekeeper` changes nothing, the session owns the gatekeeper |
 | `test_engine_governed.py` | 20 | The engine's authorization, approval and output-scan call sites, driven by a scripted gatekeeper |
 | `test_operator_shell_approve.py` | 7 | The `:approve` verb at the operator prompt |
+| `test_local_approvals.py` | 32 | An agent's gated request is held until the operator approves: the local approval store, the engine, the session socket, the prompt, and clients declaring an agent caller |
 | `test_packaging_independence.py` | 9 | The standalone install names no AgentLighthouse package and no source outside the repo |
 | `test_e2e.py` | 18 | Two full cycles, the agent path, chain failure modes, hop fallback, forwarding detection, probe reporting — over real SSH |
-| **Total (standalone)** | **484** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
+| **Total (standalone)** | **516** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
 
 Counts move as tests are added; `uv run pytest` is the authority. On a machine
 that has had the integrated install, run `uv sync --extra dev` first, or the

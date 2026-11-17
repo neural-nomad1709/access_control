@@ -126,8 +126,8 @@ means adding `do_<name>` to `SessionServer` — the dispatcher finds it.
 | `operations` | — | The operations this session may run | agents |
 | `reload` | — | `{host_id, operations[], added[], removed[], warnings[], route}` | `ac reload` |
 | `preview` | `operation_id`, `params` | The rendered preview | agents |
-| `run_operation` | `operation_id`, `params`, `confirmed`, `dry_run`, `only_steps`, `start_at` | `OperationOutcome.to_dict()` | `ac run`, `ac brief run`, campaigns |
-| `run_command` | `command`, `shell`, `confirmed`, `timeout_s` | `ExecResult.to_dict()` | `ac exec` |
+| `run_operation` | `operation_id`, `params`, `confirmed`, `dry_run`, `only_steps`, `start_at`, `agent_caller` | `OperationOutcome.to_dict()` | `ac run`, `ac brief run`, campaigns |
+| `run_command` | `command`, `shell`, `confirmed`, `timeout_s`, `agent_caller` | `ExecResult.to_dict()` | `ac exec` |
 | `fetch_log` | `path`, `tail` | `ExecResult.to_dict()` | `ac logs` |
 | `upload` | `local_path`, `remote_path` | `{uploaded}` | `ac upload` |
 | `download` | `remote_path`, `local_path` | `{downloaded}` | `ac download` |
@@ -139,6 +139,12 @@ means adding `do_<name>` to `SessionServer` — the dispatcher finds it.
 
 **`credentials_for` returns a username only. Passwords never cross this socket.**
 There is no method that returns a secret.
+
+**`agent_caller`** is sent as `true` by a CLI client that finds itself running
+inside an agent harness. It can only make the session stricter: the request is
+handled as an agent's, so `confirmed` is ignored and gated work is held for the
+operator's `:approve`. There is no method that resolves an approval; that
+happens only at the `ac connect` prompt.
 
 ### The MCP face
 

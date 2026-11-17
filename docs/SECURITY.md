@@ -196,7 +196,7 @@ of which can only subtract capability:
 | 1 | **Reachability** — the route must be declared, unambiguous, and must not cross an environment boundary | `routegraph.resolve` at load *and* connect time | None in-tool |
 | 2 | **Catalogue binding** — the operation's `host_ids`/`tags` must include this host | `Operation.applies_to` | None |
 | 3 | **Session allow-list** — `ac connect --ops a,b`; also refuses ad-hoc commands unless `--allow-exec` | `Session.permits`, `Session.exec_permitted` | Reconnect with a wider list, or with `--allow-exec` |
-| 4 | **Permission gate** — gated/destructive operations need `--confirm`, and the refusal quotes the fully rendered commands | `Engine._check_permission` | The operator approving |
+| 4 | **Permission gate** — gated/destructive operations need `--confirm` from a human, and the refusal quotes the fully rendered commands. From an agent `--confirm` carries no weight: the request is held until the operator types `:approve <id>` at the `ac connect` prompt | `Engine._check_permission`, `LocalGatekeeper` | The operator approving |
 | 5 | **Command deny-list** — every rendered command is classified immediately before it is sent | `safety.check` | `CONFIRM` by confirming; `BLOCKED` **never** |
 
 Two structural properties behave like authorization:

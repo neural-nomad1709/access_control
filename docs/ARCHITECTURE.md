@@ -372,8 +372,10 @@ Plus two structural constraints that behave like authorization:
 
 A session is marked **agent-attached** when `ac connect` is given an agent id
 (`--agent-id` or `AC_AGENT_ID`) or is itself started inside a Claude Code
-environment. On an agent-attached session the caller's `--confirm` carries no
-weight:
+environment. A single request is treated the same way when the client command
+that sent it (`ac run`, `ac exec`, `ac brief run`, `ac campaign run`) runs
+inside an agent harness and says so (`agent_caller`). In both cases the caller's
+`--confirm` carries no weight:
 
 - a gated operation, or a `CONFIRM`-class ad-hoc command, files an approval
   request through the `Gatekeeper` and is refused until a human resolves it out
@@ -385,11 +387,12 @@ weight:
   operation and command is gated until the session ends.
 
 The `Gatekeeper` protocol has four methods: `authorize`, `request_approval`,
-`scan_output` and `receipt`. Two implementations ship:
+`scan_output` and `receipt`. Three implementations ship:
 
 | Implementation | Behaviour |
 |---|---|
-| `NullGatekeeper` (default) | Allows everything, scans nothing, drops receipts, and answers approval requests with `not_governed`. A gated action on an agent-attached session therefore cannot run at all |
+| `LocalGatekeeper` (default for every session `ac connect` builds) | No policy, no scanning, no receipts. Holds approval requests in the session process; the operator resolves them with `:approve` / `:deny` at the `ac connect` prompt. Nothing leaves the process and nothing external is needed |
+| `NullGatekeeper` (an `Engine` built on a session with no gatekeeper) | Allows everything, scans nothing, drops receipts, and answers approval requests with `not_governed`, so a gated agent request cannot run at all |
 | `LighthouseGatekeeper` (`access-control[lighthouse]` extra) | Embeds AgentLighthouse: default-deny tool policy per SPIFFE identity, held approvals, output scanning with taint, and an Ed25519-signed, hash-chained receipt ledger verifiable offline with `al-verify` |
 
 The MCP surface (`ac mcp`) applies the same rule from the other side: it drops
@@ -397,11 +400,18 @@ any `confirmed` argument, and it does not expose tunnels, session lifecycle or
 credentials at all.
 
 Two limits, stated plainly. The CLI does not construct a `LighthouseGatekeeper`
-today, so `ac connect` always runs with `NullGatekeeper`; the embedded plane is
+today, so `ac connect` always runs with `LocalGatekeeper`; the embedded plane is
 reachable only by passing `gatekeeper=` to `daemon.build_session` from code. And
-a session opened from a plain terminal with no agent id is *not* agent-attached,
-so an agent driving it can still satisfy the gate with `--confirm`. Both are
+on a session opened from a plain terminal with no agent id, the only thing that
+marks a request as an agent's is the client's own `agent_caller` declaration,
+which it derives from its environment. That stops an agent that approves its own
+work by habit. It does not stop one that deliberately strips its environment, so
+a session meant for an agent should be opened with `--agent-id`. Both are
 addressed in §19.
+
+A prompt can resolve approvals only when it is a human's. If `ac connect` itself
+was started inside an agent harness (`Session.agent_held_prompt`), `:approve` is
+refused there.
 
 The real access control is still the estate's: `sshd_config`, firewall rules,
 WinRM ACLs, and the account's own rights. This tool's gates constrain *this

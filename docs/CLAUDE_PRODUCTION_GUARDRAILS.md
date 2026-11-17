@@ -315,14 +315,18 @@ Five points where a human is (or should be) in the loop:
 | 4 | Approving the brief before the window (`ac brief show`) | **[CONFIG]** |
 | 5 | Signing off against `success_criteria` afterwards | **[CONFIG]** |
 
-**[GAP]** `--confirm` is a flag the agent passes. Nothing in the tool proves a
-human said yes at that moment. The operator's presence at the terminal is the
-control. If you need a hard interactive gate, that is a feature to build — see
-[gap-analysis.md](gap-analysis.md).
+**[BUILT]** An agent's `--confirm` does not satisfy checkpoints 2 and 3. Its
+request is held, the `ac connect` window prints `approval requested: apr-…` with
+the exact commands, and nothing runs until the operator types `:approve <id>`
+there. One approval authorizes one run of those commands; an unanswered request
+lapses after 15 minutes into a denial.
 
-Practical mitigation today: connect with `--ops` limited to read-only operations
-and require the *operator* to run the destructive `ac run … --confirm`
-themselves. **[CONFIG]**
+A request is treated as an agent's when the session was opened with `--agent-id`
+(or `AC_AGENT_ID`), or when the client command runs inside an agent harness.
+**Open every session an agent will use with `--agent-id`** **[CONFIG]**: the
+second signal comes from the client's environment, which a deliberately evasive
+agent could strip. With `--agent-id` the session itself refuses `--confirm`,
+whatever the client claims.
 
 ### 5.2 Read-only versus write
 
@@ -754,7 +758,7 @@ rough priority order. Each is tracked in
 
 | # | Gap | Impact | Compensating control today |
 |---|---|---|---|
-| 1 | `--confirm` does not prove a human approved *at that moment* | An agent can self-approve a gated operation on a live session | Operator presence; `--ops` scoping; run destructive steps yourself |
+| 1 | ~~`--confirm` does not prove a human approved~~ **Closed 2026-11-16** for sessions opened with `--agent-id`: gated agent work is held for `:approve` at the operator prompt | On a session opened *without* `--agent-id`, detection relies on the client's environment | Always open agent sessions with `--agent-id` |
 | 2 | ~~`ac exec` is not covered by the `--ops` allow-list~~ **Closed 2026-11-16** | A `--ops` session refuses `ac exec` unless `--allow-exec` is given | — |
 | 3 | No output filtering for PII/regulated data | Production log content reaches the model | Narrow collectors; classify operations |
 | 4 | No SSO, no RBAC, no separation of duties | Attribution depends on process | `AC_AGENT_ID`; per-environment inventories; repo permissions |

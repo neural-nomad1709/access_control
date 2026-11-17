@@ -124,7 +124,21 @@ operator@bastion-staging.example.net [bastion-staging · FALLBACK] $
 | `:route` | The full hop chain verbatim from the inventory |
 | `:retry` | Re-attempt the target leg (only meaningful when degraded) |
 | `:timeout <secs>` | Per-command timeout (default 300) |
+| `:approve` | List the approvals an agent is waiting on, with the exact commands each would run |
+| `:approve <id>` | Approve one. It authorizes one run of exactly those commands |
+| `:deny <id>` | Refuse one |
 | `:exit`, `:quit` | Close the session and wipe credentials |
+
+**Approving an agent's gated work.** When an agent asks for a gated operation or
+a `CONFIRM`-class command, nothing runs. The request is held, this window prints
+`approval requested: apr-…` with the commands, and the agent is told to re-run
+once you have answered. A request you ignore lapses after 15 minutes and counts
+as a denial. A request is the agent's when the session was opened with
+`--agent-id` (or `AC_AGENT_ID`), or when the `ac run` / `ac exec` /
+`ac brief run` / `ac campaign run` command was itself started inside an agent
+harness such as Claude Code. Your own `ac run --confirm` from a plain terminal
+is not held. If `ac connect` itself was started inside an agent harness, its
+prompt cannot approve anything: open the session from your own terminal.
 
 Anything else runs on that machine through the same audited channel, with the
 same deny-list — `CONFIRM`-class commands are allowed (a human typed them), but
@@ -200,7 +214,7 @@ Runs an operation on a host.
 | Flag | Effect |
 |---|---|
 | `-p`, `--param name=value` | Repeatable. Values are strings |
-| `--confirm` | Approves a gated (or destructive) operation. Without it, a gated operation is refused **and the refusal quotes the fully rendered commands** |
+| `--confirm` | Approves a gated (or destructive) operation. Without it, a gated operation is refused **and the refusal quotes the fully rendered commands**. From an agent it carries no weight: the operation is held for `:approve` at the operator prompt instead |
 | `--dry-run` | Renders and reports policy, executes nothing. **Works with no live session** |
 | `--only a,b` | Run only these step ids |
 | `--start-at id` | Resume from this step onward — use after fixing a failure rather than re-running from the top |

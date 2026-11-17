@@ -999,8 +999,8 @@ Known, and none of them hidden elsewhere in the docs.
 8. **The command policy is a pattern list.** It will not catch everything.
 9. **`.ppk` keys need conversion** — Paramiko cannot read PuTTY's format.
 10. **No RBAC, no SSO, no multi-user approval workflow.** One operator, one
-    session. `--confirm` is a flag the caller passes; nothing proves a human
-    approved at that moment.
+    session. A human's `--confirm` is taken at its word; an agent's is not,
+    and its gated work waits for `:approve` at the operator prompt.
 11. **An unrestricted session allows ad-hoc commands.** Without `--ops`,
     `ac exec` is gated only by the deny-list. With `--ops` it is refused unless
     `--allow-exec` is also given.

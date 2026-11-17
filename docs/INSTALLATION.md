@@ -258,7 +258,7 @@ uv run ac disconnect <host>
 ## 8. Run the test suite
 
 ```powershell
-uv run pytest                                            # 484 passed, 3 skipped; fully offline
+uv run pytest                                            # 516 passed, 3 skipped; fully offline
 uv run pytest -q tests/test_e2e.py                       # the two end-to-end loops
 uv run pytest --cov=access_control --cov-report=term-missing
 ```

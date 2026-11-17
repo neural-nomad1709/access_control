@@ -37,7 +37,7 @@ uv run ac connect win-app01         uv run ac verify win-app01 --expect-hostname
 ```powershell
 uv sync --extra dev
 uv run ac doctor
-uv run pytest              # 484 passed, 3 skipped; entirely offline
+uv run pytest              # 516 passed, 3 skipped; entirely offline
 ```
 
 ### 2.2 The offline loop
