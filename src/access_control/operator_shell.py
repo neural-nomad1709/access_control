@@ -206,14 +206,15 @@ class OperatorShell:
     # -- approvals (D3: the human at this prompt is usually the approver) ---
 
     def _resolve_approval(self, args: list[str], decision: str) -> None:
-        if getattr(self.session, "agent_attached", False):
+        if getattr(self.session, "agent_held_prompt", False):
             # R-01 through the side door: an agent holding this prompt must
-            # not resolve the request its own gated run filed. Approvals
-            # belong to a human surface — another operator shell, or the
-            # governance control plane.
+            # not resolve the request its own gated run filed. `ac connect`
+            # was started inside an agent harness, so this prompt is not a
+            # human surface; open the session from your own terminal.
             self.err.print(
-                "[red]this session is agent-attached; approvals cannot be "
-                "resolved from inside it[/red]"
+                "[red]this prompt was started inside an agent harness; approvals "
+                "cannot be resolved from it. Open the session from your own "
+                "terminal.[/red]"
             )
             return
         gatekeeper = getattr(self.session, "gatekeeper", None)
@@ -231,9 +232,17 @@ class OperatorShell:
             for row in pending:
                 remaining = row.get("remaining_s")
                 lapse = f", lapses in {int(remaining)}s" if remaining is not None else ""
+                # markup=False: the commands are full of square brackets, and
+                # the approver must see them verbatim.
                 self.console.print(
-                    f"  {row['request_id']}  {row['tool']}  ({row['actor']}{lapse})\n"
-                    f"    :approve {row['request_id']}   or   :deny {row['request_id']}"
+                    f"  {row['request_id']}  {row['tool']}  ({row['actor']}{lapse})",
+                    markup=False,
+                )
+                if row.get("detail"):
+                    self.console.print(str(row["detail"]), markup=False)
+                self.console.print(
+                    f"    :approve {row['request_id']}   or   :deny {row['request_id']}",
+                    markup=False,
                 )
             return
         request_id = args[0]
@@ -241,6 +250,16 @@ class OperatorShell:
         if gatekeeper.resolve_approval(request_id, decision, by=resolver):
             verb = "approved" if decision == "allow" else "denied"
             self.console.print(f"[green]{verb}[/green] {request_id} as {resolver}")
+            audit = getattr(self.session, "audit", None)
+            if audit is not None:
+                # emit(), not action(): the trail records who resolved it
+                # without a second receipt going to an external ledger.
+                audit.emit(
+                    "approval.resolved",
+                    request_id=request_id,
+                    decision=decision,
+                    resolved_by=resolver,
+                )
         else:
             self.err.print(
                 f"[red]could not resolve {request_id}[/red] -- unknown, already "

@@ -36,10 +36,10 @@ from typing import Any, Callable
 from .audit import AuditLog, record_rdp_launch
 from .config import Catalog, Inventory, load_all
 from .context import AgentIdentity
-from .credentials import CredentialStore, select_prompter
+from .credentials import CredentialStore, select_prompter, under_agent_harness
 from .engine import Engine
 from .errors import AccessControlError, SessionError
-from .gatekeeper import Gatekeeper
+from .gatekeeper import Gatekeeper, LocalGatekeeper
 from .logging_setup import set_library_log_level
 from .paths import ensure_dir, session_dir
 from .preflight import run_preflight
@@ -473,6 +473,7 @@ class SessionServer:
         dry_run: bool = False,
         only_steps: list[str] | None = None,
         start_at: str | None = None,
+        agent_caller: bool = False,
     ) -> dict[str, Any]:
         self.session.touch()
         outcome = self.engine.run_operation(
@@ -482,6 +483,7 @@ class SessionServer:
             dry_run=dry_run,
             only_steps=only_steps,
             start_at=start_at,
+            agent_caller=bool(agent_caller),
         )
         return outcome.to_dict()
 
@@ -491,10 +493,12 @@ class SessionServer:
         shell: str | None = None,
         confirmed: bool = False,
         timeout_s: int = 300,
+        agent_caller: bool = False,
     ) -> dict[str, Any]:
         self.session.touch()
         return self.engine.run_command(
-            command, shell=shell, confirmed=confirmed, timeout_s=timeout_s
+            command, shell=shell, confirmed=confirmed, timeout_s=timeout_s,
+            agent_caller=bool(agent_caller),
         ).to_dict()
 
     def do_fetch_log(self, path: str, tail: int = 200) -> dict[str, Any]:
@@ -655,8 +659,9 @@ def build_session(
     """Construct (but do not connect) a session for ``host_id``.
 
     ``gatekeeper`` plugs an external governance plane in: its ``receipt`` sink
-    mirrors every canonical audit action. None (the default) keeps today's
-    behaviour exactly.
+    mirrors every canonical audit action. None (the default) gives the session
+    a ``LocalGatekeeper``: no policy, no receipts, and approvals for agent
+    requests held in this process.
     """
     if inventory is None or catalog is None:
         loaded_inventory, loaded_catalog, _warnings = load_all()
@@ -679,7 +684,10 @@ def build_session(
         session_id=identity.session_id,
         creds=CredentialStore(prompter=select_prompter(prompter_name)),
         audit=audit,
-        gatekeeper=gatekeeper,
+        # With no external plane, the session holds its own approvals and the
+        # operator resolves them at this session's prompt.
+        gatekeeper=gatekeeper if gatekeeper is not None else LocalGatekeeper(),
+        agent_held_prompt=under_agent_harness(),
         # An explicit agent id (flag or env) or a Claude Code environment
         # means an agent drives this session: its confirm gate resolves out
         # of band, never via a flag the agent itself passes.

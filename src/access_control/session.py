@@ -63,6 +63,11 @@ class Session:
     #: cannot satisfy the confirm gate with a flag: approvals resolve out of
     #: band through the gatekeeper.
     agent_attached: bool = False
+    #: True when ``ac connect`` itself was started inside an agent harness, so
+    #: whatever types at this session's prompt may be the agent. Such a prompt
+    #: cannot resolve approvals. ``--agent-id`` alone does not set it: there the
+    #: prompt is still the human's own terminal.
+    agent_held_prompt: bool = False
     #: Set when the gatekeeper's scanner found hostile content in collected
     #: output. Monotonic for the life of the session; a tainted session gates
     #: every operation.

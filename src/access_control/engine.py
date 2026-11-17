@@ -322,12 +322,17 @@ class Engine:
         dry_run: bool = False,
         only_steps: Sequence[str] | None = None,
         start_at: str | None = None,
+        agent_caller: bool = False,
     ) -> OperationOutcome:
         """Run an operation's steps in order, stopping at the first failure.
 
         ``only_steps`` and ``start_at`` exist for the remediate-and-retry loop:
         after fixing what broke, re-running the whole operation from the top is
         usually wrong (and sometimes destructive).
+
+        ``agent_caller`` says the request came from a client running inside an
+        agent harness. It is treated like an agent-attached session: gated work
+        is held for the operator's approval and ``confirmed`` carries no weight.
         """
         op = self._operation(operation_id)
         variables = operation_variables(op, self.session.host, params or {})
@@ -345,8 +350,11 @@ class Engine:
 
         # An out-of-band approval covers these exact rendered commands, the
         # same consent an operator's --confirm expresses — so it satisfies the
-        # per-step confirm gate for gated commands inside the operation.
-        confirmed = self._check_permission(op, params or {}, confirmed, dry_run) or confirmed
+        # per-step confirm gate for gated commands inside the operation. An
+        # agent's own --confirm satisfies neither gate.
+        agent = bool(getattr(self.session, "agent_attached", False) or agent_caller)
+        approved = self._check_permission(op, params or {}, confirmed, dry_run, agent)
+        confirmed = approved or (confirmed and not agent)
 
         if self.audit:
             self.audit.emit(
@@ -505,10 +513,12 @@ class Engine:
         shell: str | None = None,
         confirmed: bool = False,
         timeout_s: int = 300,
+        agent_caller: bool = False,
     ) -> ExecResult:
         """Ad-hoc command -- the escape hatch used while diagnosing a failure."""
         return self._run(
-            command, shell=shell, confirmed=confirmed, timeout_s=timeout_s, ad_hoc=True
+            command, shell=shell, confirmed=confirmed, timeout_s=timeout_s, ad_hoc=True,
+            agent_caller=agent_caller,
         )
 
     def fetch_log(self, path: str, tail: int = 200) -> ExecResult:
@@ -529,6 +539,7 @@ class Engine:
         confirmed: bool = False,
         timeout_s: int = 300,
         ad_hoc: bool,
+        agent_caller: bool = False,
     ) -> ExecResult:
         try:
             if ad_hoc and not getattr(self.session, "exec_permitted", True):
@@ -539,10 +550,10 @@ class Engine:
                     f"    uv run ac connect {self.session.host_id} --ops {allowed} --allow-exec"
                 )
             self._authorize("ac_exec", {"command": command})
-            if getattr(self.session, "agent_attached", False):
-                # The escape hatch must not re-open self-approval: a governed
-                # agent's gated ad-hoc command takes the same out-of-band
-                # approval as a gated operation; --confirm never satisfies it.
+            if getattr(self.session, "agent_attached", False) or agent_caller:
+                # The escape hatch must not re-open self-approval: an agent's
+                # gated ad-hoc command takes the same out-of-band approval as
+                # a gated operation; --confirm never satisfies it.
                 self._check_exec_approval(command, confirmed)
             else:
                 safety.check(command, confirmed=confirmed)
@@ -763,7 +774,12 @@ class Engine:
         return op
 
     def _check_permission(
-        self, op: Operation, params: Mapping[str, Any], confirmed: bool, dry_run: bool
+        self,
+        op: Operation,
+        params: Mapping[str, Any],
+        confirmed: bool,
+        dry_run: bool,
+        agent_attached: bool,
     ) -> bool:
         """Gate the operation; returns True when an out-of-band approval was
         granted (it carries the weight of an operator's --confirm)."""
@@ -771,7 +787,14 @@ class Engine:
         # no longer be trusted to drive even normally-allowed operations
         # unattended: everything gates until the session ends.
         gated = op.is_gated or getattr(self.session, "tainted", False)
-        agent_attached = getattr(self.session, "agent_attached", False)
+        if agent_attached and not gated and not dry_run:
+            # An operation not marked gated can still contain a confirm-class
+            # command. A human's --confirm covers it at the step; an agent's
+            # does not, so the whole operation is held for approval instead.
+            gated = any(
+                step["policy"] == safety.CONFIRM
+                for step in self.preview(op.id, params)["steps"]
+            )
 
         if dry_run or not gated or (confirmed and not agent_attached):
             if self.audit and not dry_run:

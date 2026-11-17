@@ -118,8 +118,21 @@ class Prompter(Protocol):
 AGENT_HARNESS_VARS = ("CLAUDECODE", "AI_AGENT", "CLAUDE_CODE_ENTRYPOINT")
 
 
-def _under_agent_harness() -> bool:
+def under_agent_harness() -> bool:
+    """Is this process running inside an agent harness (Claude Code and the like)?"""
     return any(os.environ.get(var) for var in AGENT_HARNESS_VARS)
+
+
+def caller_marker() -> dict[str, bool]:
+    """What a client command adds to a run request made from inside a harness.
+
+    The session then holds gated work for the operator's approval instead of
+    accepting ``--confirm``. Empty from a plain terminal. This stops an agent
+    that approves its own work by habit; it is not a defence against one that
+    deliberately strips its environment, which is why a session meant for an
+    agent should also be opened with ``--agent-id``.
+    """
+    return {"agent_caller": True} if under_agent_harness() else {}
 
 
 class TerminalPrompter:
@@ -129,7 +142,7 @@ class TerminalPrompter:
 
     @staticmethod
     def available() -> bool:
-        if _under_agent_harness():
+        if under_agent_harness():
             return False
         try:
             return bool(sys.stdin) and sys.stdin.isatty()

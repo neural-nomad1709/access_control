@@ -27,7 +27,12 @@ from .audit import list_sessions, load_session, record_rdp_launch
 from .brief import load_brief, validate_brief
 from .campaign import load_campaign, plan_campaign, run_campaign
 from .config import load_all, load_inventory, load_operations
-from .credentials import TerminalPrompter, WindowsCredUIPrompter, select_prompter
+from .credentials import (
+    TerminalPrompter,
+    WindowsCredUIPrompter,
+    caller_marker,
+    select_prompter,
+)
 from .daemon import (
     EphemeralSession,
     SessionClient,
@@ -38,6 +43,7 @@ from .daemon import (
     list_descriptors,
 )
 from .errors import AccessControlError, RouteError
+from .gatekeeper import LocalGatekeeper
 from .logging_setup import install_quiet_logging, record_unexpected
 from .operator_shell import run_operator_shell
 from .paths import config_dir, log_dir, session_dir
@@ -58,6 +64,17 @@ err = Console(stderr=True)
 def _fail(message: str, code: int = 1) -> None:
     err.print(f"[bold red]error:[/bold red] {message}")
     raise typer.Exit(code)
+
+
+def _announce_approval(row: dict[str, Any]) -> None:
+    """Tell the operator, in the ``ac connect`` window, that an agent is waiting."""
+    request_id = row["request_id"]
+    _raw(
+        f"\napproval requested: {request_id}  {row['tool']}  ({row['actor']})\n"
+        f"{row['detail']}\n"
+        f"  :approve {request_id}   or   :deny {request_id}",
+        "yellow",
+    )
 
 
 def _client_or_fail(host_id: str) -> SessionClient:
@@ -448,6 +465,9 @@ def connect(
     except AccessControlError as exc:
         _fail(str(exc))
         return
+
+    if isinstance(session.gatekeeper, LocalGatekeeper):
+        session.gatekeeper.on_request = _announce_approval
 
     console.print(
         Panel(
@@ -868,6 +888,7 @@ def brief_run(
                 confirmed=confirm,
                 start_at=step.start_at,
                 only_steps=list(step.only_steps) or None,
+                **caller_marker(),
             )
         except AccessControlError as exc:
             _raw(str(exc), "red")
@@ -890,6 +911,7 @@ def brief_run(
                         client.call(
                             "run_operation", operation_id=rb.operation,
                             params=dict(rb.params), confirmed=confirm,
+                            **caller_marker(),
                         )
                     )
             break
@@ -1125,6 +1147,7 @@ def run_operation(
                 dry_run=dry_run,
                 only_steps=only_steps,
                 start_at=start_at,
+                **caller_marker(),
             )
         elif dry_run:
             # A dry run touches no server, so it needs no session at all.
@@ -1224,6 +1247,7 @@ def exec_command(
             shell=shell,
             confirmed=confirm,
             timeout_s=timeout,
+            **caller_marker(),
         )
     except AccessControlError as exc:
         _fail(str(exc))

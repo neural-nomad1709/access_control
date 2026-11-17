@@ -219,6 +219,8 @@ class TestSchemaMatchesDaemon:
                 p for p, v in sig.parameters.items()
                 if p != "self" and v.kind in (v.POSITIONAL_OR_KEYWORD, v.KEYWORD_ONLY)
             }
-            schema_params = set(spec.properties) | {"confirmed"}
+            # Deliberately not exposed: `confirmed` carries no weight here, and
+            # `agent_caller` is what a CLI client declares about itself.
+            schema_params = set(spec.properties) | {"confirmed", "agent_caller"}
             missing = daemon_params - schema_params
             assert not missing, f"{name} omits daemon param(s) {missing}"

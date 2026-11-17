@@ -19,11 +19,14 @@ a gatekeeper and hands it down.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import secrets
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Protocol, runtime_checkable
+from typing import Any, Callable, Mapping, Protocol, runtime_checkable
 
 _SPIFFE_UNSAFE = re.compile(r"[^a-z0-9._-]")
 
@@ -95,6 +98,107 @@ class NullGatekeeper:
 
     def receipt(self, **fields: Any) -> None:
         return None
+
+
+@dataclass
+class _HeldApproval:
+    request_id: str
+    actor: str
+    tool: str
+    detail: str
+    session: str
+    filed_at: float
+    status: str = "pending"  # pending | approved | denied
+
+
+class LocalGatekeeper(NullGatekeeper):
+    """Approvals held in this process and resolved at the operator's prompt.
+
+    The standalone answer to "a flag the caller passes does not prove a human
+    agreed": an agent's gated request is held here until the human at the
+    ``ac connect`` prompt resolves it with ``:approve`` / ``:deny``. There is no
+    external plane and nothing leaves the process. Everything else is
+    ``NullGatekeeper``'s behaviour: no policy, no scanning, no receipts.
+
+    A request is bound to the exact rendered commands it showed, one approval
+    authorizes one run, and a request nobody answers lapses into a denial.
+    """
+
+    def __init__(
+        self,
+        *,
+        approval_timeout_s: float = 900,
+        clock: Callable[[], float] = time.monotonic,
+        on_request: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
+        self._timeout_s = approval_timeout_s
+        self._clock = clock
+        #: Called once when a request is first filed, so the operator's window
+        #: can say that something is waiting.
+        self.on_request = on_request
+        self._held: dict[tuple[str, str, str], _HeldApproval] = {}
+        # Daemon request threads file and poll; the operator's prompt resolves.
+        self._lock = threading.Lock()
+
+    def _lapsed(self, held: _HeldApproval) -> bool:
+        return held.status == "pending" and self._clock() - held.filed_at > self._timeout_s
+
+    def _row(self, held: _HeldApproval) -> dict[str, Any]:
+        return {
+            "request_id": held.request_id,
+            "actor": held.actor,
+            "tool": held.tool,
+            "detail": held.detail,
+            "session": held.session,
+            "remaining_s": max(0, self._timeout_s - (self._clock() - held.filed_at)),
+        }
+
+    def request_approval(self, actor: str, tool: str, rendered_commands: str,
+                         session: str) -> ApprovalTicket:
+        """File the held request for these exact commands, or poll it."""
+        digest = hashlib.sha256(rendered_commands.encode("utf-8")).hexdigest()
+        key = (session, tool, digest)
+        with self._lock:
+            held = self._held.get(key)
+            if held is None:
+                held = _HeldApproval(
+                    request_id=f"apr-{secrets.token_hex(3)}", actor=actor, tool=tool,
+                    detail=rendered_commands, session=session, filed_at=self._clock(),
+                )
+                self._held[key] = held
+                announce = self.on_request
+                row = self._row(held)
+            else:
+                announce = None
+                if held.status == "pending" and not self._lapsed(held):
+                    return ApprovalTicket(request_id=held.request_id, status="pending")
+                del self._held[key]  # resolved or lapsed: consumed either way
+                status = "timed_out" if held.status == "pending" else held.status
+                return ApprovalTicket(request_id=held.request_id, status=status)
+        if announce is not None:
+            announce(row)
+        return ApprovalTicket(request_id=held.request_id, status="pending")
+
+    def pending_approvals(self) -> list[dict[str, Any]]:
+        """What is waiting, for the operator prompt's ``:approve``. ``detail``
+        is what will actually run -- the approver reads it, not the tool name."""
+        with self._lock:
+            return [
+                self._row(held) for held in self._held.values()
+                if held.status == "pending" and not self._lapsed(held)
+            ]
+
+    def resolve_approval(self, request_id: str, decision: str, *, by: str) -> bool:
+        """Resolve one pending request (allow | deny). False if it is unknown,
+        already resolved, or lapsed -- a lapsed request stays a denial."""
+        with self._lock:
+            for held in self._held.values():
+                if held.request_id == request_id:
+                    if held.status != "pending" or self._lapsed(held):
+                        return False
+                    held.status = "approved" if decision == "allow" else "denied"
+                    return True
+        return False
 
 
 # How canonical audit actions land in receipt-v1.1's closed vocabulary.

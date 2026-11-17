@@ -131,6 +131,18 @@ operations:
 """
 
 
+@pytest.fixture(autouse=True)
+def plain_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test starts as a human's plain terminal.
+
+    The suite is itself often run from inside an agent harness, whose
+    environment markers change behaviour (prompting, agent-attached sessions,
+    held approvals). A test that wants the harness sets the marker itself.
+    """
+    for var in ("CLAUDECODE", "CLAUDE_CODE", "CLAUDE_CODE_ENTRYPOINT", "AI_AGENT", "AC_AGENT_ID"):
+        monkeypatch.delenv(var, raising=False)
+
+
 @pytest.fixture
 def config_files(tmp_path: Path) -> Path:
     directory = tmp_path / "config"
