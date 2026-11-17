@@ -419,8 +419,7 @@ def check_no_active_install(session: Session) -> CheckResult:
         return CheckResult("no.active_install", True, "not applicable on this platform")
 
     command = (
-        "$p = Get-Process msiexec, setup, wusa -ErrorAction SilentlyContinue | "
-        "Where-Object { $_.SessionId -ne $null }; "
+        "$p = Get-Process msiexec, setup, wusa -ErrorAction SilentlyContinue; "
         '"COUNT=" + (@($p).Count)'
     )
     try:

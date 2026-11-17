@@ -27,6 +27,7 @@ from access_control.preflight import (
     check_chain_intact,
     check_disk_space,
     check_identity,
+    check_no_active_install,
     check_round_trip,
     check_services_running,
     run_preflight,
@@ -372,6 +373,27 @@ class TestPreflightChecks:
         session = make_session("win01")
         session.ssh_hops = []
         assert check_chain_intact(session).passed
+
+    def test_active_install_passes_with_only_the_resident_msiexec(self, make_session) -> None:
+        session = make_session("win01", responder=lambda c: ok_result(c, "COUNT=2"))
+        assert check_no_active_install(session).passed
+
+    def test_active_install_warns_on_real_installer_activity(self, make_session) -> None:
+        session = make_session("win01", responder=lambda c: ok_result(c, "COUNT=4"))
+        check = check_no_active_install(session)
+        assert not check.passed and check.severity == WARNING
+        assert "4 installer" in check.detail and "1618" in check.remedy
+
+    def test_active_install_is_not_applicable_off_windows(self, make_session) -> None:
+        session = make_session("lin01")
+        assert check_no_active_install(session).passed
+        assert session.commands == []
+
+    def test_active_install_counts_every_installer_process(self, make_session) -> None:
+        """F-13: the SessionId filter was always true, so it filtered nothing."""
+        session = make_session("win01", responder=lambda c: ok_result(c, "COUNT=0"))
+        check_no_active_install(session)
+        assert "SessionId" not in session.commands[0]
 
 
 class TestPreflightOrdering:
