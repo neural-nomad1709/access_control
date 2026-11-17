@@ -385,8 +385,8 @@ Related refusals, all raised when the config is read:
 | Message | Fix |
 | --- | --- |
 | `no chain of edges connects it back to 'local'` | The node is declared but nothing links it to an entry point. Give some node on the chain a `via: {from: local, ...}`. |
-| `has a source '<id>' that is not defined under 'hops:' or 'hosts:'` | A `via.from` (or a `routes:` entry) names a machine that is commented out or misspelled. |
-| `connectivity is declared twice` | The file has both `via:` blocks and a top-level `routes:` list. Keep one — `via:` is preferred. |
+| `has a source '<id>' that is not defined under 'hops:' or 'hosts:'` | A `via.from` names a machine that is commented out or misspelled. |
+| `'routes:' block is no longer supported` / `.path: no longer supported` | The file uses an older spelling. Move each leg onto the machine it reaches as a `via:` block; [CONFIGURATION.md §3.7](../CONFIGURATION.md#37-routes-and-path--refused) has the conversion. |
 | `ambiguous route: N declared paths of equal length` | Two ways in. Remove one edge, or split the target per environment. |
 | `crosses an environment boundary: QA -> PROD` | Environments are separated deliberately. If the traversal is genuinely intended, align the `context.environment` values or declare a dedicated node. |
 | `port: required` | Ports are mandatory on every edge. The message names what the default would have been. |

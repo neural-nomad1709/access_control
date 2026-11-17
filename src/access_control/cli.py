@@ -302,15 +302,12 @@ def routes(
         if json_out:
             _emit(
                 {
-                    "declared_via": "routes" if inventory.routes_declared else "path shorthand",
                     "entry_points": inventory.graph.entry_points(),
                     "edges": rows,
                 },
                 True,
             )
             return
-        source = "explicit routes:" if inventory.routes_declared else "compiled from path:"
-        console.print(f"[dim]connectivity {source}[/dim]\n")
         table = Table(show_header=True, header_style="bold")
         for column in ("source", "target", "automation", "interactive", "domain"):
             table.add_column(column, overflow="fold")
@@ -1430,9 +1427,9 @@ def _interactive_destination(
             f"'{node}' is declared as a pre-established forward for "
             f"{leg.endpoint.protocol} at {leg.endpoint.hostname}:{leg.endpoint.port}, "
             f"and there is no forward for {protocol}.\n"
-            f"Declare the {protocol} forward on that route as well, or remove "
-            f"'preestablished' and give the address as seen from {leg.source} so the "
-            f"tunnel can be built here."
+            f"Declare the {protocol} forward on that leg as well, or set "
+            f"'preestablished: false' on its via: block and give the address as seen "
+            f"from {leg.source} so the tunnel can be built here."
         )
     return leg.endpoint.hostname, default_port, False
 
@@ -1536,8 +1533,9 @@ def tunnel(
             f"'{node}' is declared as a pre-established forward at "
             f"{leg.endpoint.hostname}:{leg.endpoint.port}, so there is nothing for this "
             f"command to build.\n"
-            f"Either use that endpoint directly, or remove 'preestablished' from the route "
-            f"and give the address as seen from {leg.source} so the tunnel can be built here."
+            f"Either use that endpoint directly, or set 'preestablished: false' on its "
+            f"via: block and give the address as seen from {leg.source} so the tunnel can "
+            f"be built here."
         )
         return
 

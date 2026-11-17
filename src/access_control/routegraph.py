@@ -190,9 +190,11 @@ class RouteEdge:
         # it is the automation or the interactive endpoint follows from the
         # protocol, since RDP can never carry commands.
         if automation_raw is None and interactive_raw is None:
-            inline = {k: data[k] for k in ("hostname", "host", "port", "protocol") if k in data}
-            if "preestablished" in data:
-                inline["preestablished"] = data["preestablished"]
+            inline = {
+                k: data[k]
+                for k in ("hostname", "host", "port", "protocol", "preestablished", "tunnel_preestablished")
+                if k in data
+            }
             if not inline:
                 raise ConfigError(
                     f"{where}: declare how '{target}' is reached from '{source}' -- either "
@@ -345,9 +347,6 @@ class RouteGraph:
 
     edges: tuple[RouteEdge, ...] = ()
     contexts: Mapping[str, NetworkContext] = field(default_factory=dict)
-    #: Node ids that may be reached without traversing the graph. Only nodes
-    #: explicitly marked so; never inferred.
-    direct_allowed: frozenset[str] = frozenset()
 
     def outgoing(self, source: str) -> list[RouteEdge]:
         return [edge for edge in self.edges if edge.source == source]
@@ -386,10 +385,10 @@ class RouteGraph:
                 f"  requested target : {target}\n"
                 f"  reason           : no declared edge reaches it\n"
                 f"  known nodes      : {known}\n"
-                f"Declare the hop explicitly in inventory.yaml under 'routes:', for example:\n"
-                f"  - source: <bastion or jump server>\n"
-                f"    target: {target}\n"
-                f"    hostname: <address as seen from the source>\n"
+                f"Declare the hop explicitly in inventory.yaml, in {target}'s own block:\n"
+                f"  via:\n"
+                f"    from: <bastion or jump server>\n"
+                f"    hostname: <address as seen from that node>\n"
                 f"    port: <explicit port>\n"
                 f"    protocol: ssh|winrm|rdp\n"
                 f"Routes are never discovered; a direct connection will not be attempted."
@@ -514,7 +513,6 @@ class RouteGraph:
         cls,
         edges: Iterable[RouteEdge],
         contexts: Mapping[str, NetworkContext] | None = None,
-        direct_allowed: Iterable[str] = (),
     ) -> "RouteGraph":
         collected = tuple(edges)
         seen: set[tuple[str, str]] = set()
@@ -526,8 +524,4 @@ class RouteGraph:
                     f"Each hop pair must appear once."
                 )
             seen.add(key)
-        return cls(
-            edges=collected,
-            contexts=dict(contexts or {}),
-            direct_allowed=frozenset(direct_allowed),
-        )
+        return cls(edges=collected, contexts=dict(contexts or {}))

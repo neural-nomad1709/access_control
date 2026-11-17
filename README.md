@@ -201,9 +201,10 @@ not retry into a path that was never permitted. A route may not cross an
 environment boundary, so a QA bastion cannot become a way into production.
 
 Because connectivity is part of the machine's own block, commenting a machine out
-takes its route with it, and there is no second place to keep in sync. A standalone
-`routes:` list and the per-host `path: [bastion1, jump1]` shorthand still load and
-compile to the same graph, but cannot be combined with `via:` in one file.
+takes its route with it, and there is no second place to keep in sync. `via:` is
+the only way to declare connectivity: the older top-level `routes:` list and
+per-host `path:` shorthand are refused at load time, with a message saying how to
+move them onto `via:`.
 
 Every setting, default and environment variable:
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md).

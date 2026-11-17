@@ -272,11 +272,10 @@ def plan_hop_route(inventory: Inventory, node_id: str) -> Route:
         interactive=hop.interactive,
         description=hop.description,
         tags=hop.tags,
-        vars={**hop.vars, "allow_direct": True},
+        vars=hop.vars,
         domain=hop.domain,
         context=hop.context,
         role=hop.role,
-        path=tuple(resolved.hops),
     )
 
     # Intermediate legs still have to be traversable; only the final one is

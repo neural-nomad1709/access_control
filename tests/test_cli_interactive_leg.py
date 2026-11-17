@@ -251,7 +251,24 @@ class TestPreestablishedForward:
 
         assert result.exit_code == 1
         assert launches == []
-        assert "no forward for rdp" in result.output.replace("\n", " ")
+        output = result.output.replace("\n", " ")
+        assert "no forward for rdp" in output
+        # A loopback leg is pre-established unless it says otherwise, so the
+        # way out is an explicit value -- "remove the key" would change nothing.
+        assert "preestablished: false" in output
+
+    def test_tunnel_to_a_pre_established_leg_says_how_to_build_one(
+        self, config_dir: Path, monkeypatch: pytest.MonkeyPatch, launches
+    ) -> None:
+        monkeypatch.setattr(cli, "attach", lambda node: None)
+        monkeypatch.setattr(cli, "EphemeralSession", ForbiddenEphemeral)
+
+        result = CliRunner().invoke(cli.app, ["tunnel", "linux-forwarded"])
+
+        assert result.exit_code == 1
+        output = result.output.replace("\n", " ")
+        assert "nothing for this command to build" in output
+        assert "preestablished: false" in output
 
 
 class TestRdpLaunchIsAudited:

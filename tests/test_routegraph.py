@@ -22,8 +22,6 @@ from access_control.errors import ConfigError, RouteError
 from access_control.route import plan_route
 from access_control.routegraph import (
     CHANNEL_NESTED_WINRM,
-    CHANNEL_SSH,
-    CHANNEL_WINRM,
     LOCAL,
     Endpoint,
     RouteEdge,
@@ -110,6 +108,17 @@ class TestEndpoints:
             {"hostname": loopback, "port": 8080, "protocol": "ssh", key: False}, "routes[0]"
         )
         assert endpoint.preestablished is False
+
+    @pytest.mark.parametrize("key", ["preestablished", "tunnel_preestablished"])
+    def test_the_inline_shorthand_carries_either_spelling(self, key: str) -> None:
+        """`via: {hostname, port, protocol, ...}` must honour both keys, as the
+        nested automation/interactive blocks do."""
+        edge = RouteEdge.parse(
+            {"source": "b", "target": "t", "hostname": "127.0.0.1", "port": 8022,
+             "protocol": "ssh", key: False},
+            "via",
+        )
+        assert edge.automation is not None and edge.automation.preestablished is False
 
 
 class TestEdgeParsing:
@@ -200,6 +209,15 @@ class TestResolution:
         assert "No route defined between requested target and available bastion" in message
         assert "linux-app01" in message
         assert "a direct connection will not be attempted" in message
+
+    def test_the_no_route_hint_shows_a_via_block(self) -> None:
+        """The example must be something the loader accepts."""
+        graph = RouteGraph.build([edge(LOCAL, "bastion1", port=2222)])
+        with pytest.raises(RouteError) as exc:
+            graph.resolve("linux-app01")
+        message = str(exc.value)
+        assert "via:" in message and "from:" in message
+        assert "routes:" not in message
 
     def test_a_declared_node_with_no_path_back_to_local_fails(self) -> None:
         graph = RouteGraph.build(
@@ -307,27 +325,34 @@ class TestEnvironmentBoundaries:
 
 
 class TestDeclarationStyles:
-    def test_explicit_routes_are_used_when_present(self, tmp_path: Path) -> None:
+    def test_a_declared_chain_is_planned_end_to_end(self, tmp_path: Path) -> None:
         inventory = inv(
             tmp_path,
             """
             hops:
-              bastion1: {role: bastion, kind: ssh, hostname: b.example, port: 2222, username: u}
-              jump1: {role: jump, kind: windows, hostname: localhost, username: u, domain: corp}
+              bastion1:
+                role: bastion
+                kind: ssh
+                username: u
+                via: {from: local, hostname: b.example, port: 2222, protocol: ssh}
+              jump1:
+                role: jump
+                kind: windows
+                username: u
+                domain: corp
+                via:
+                  from: bastion1
+                  interactive: {hostname: localhost, port: 44001, protocol: rdp}
+                  automation: {hostname: localhost, port: 45985, protocol: winrm}
             hosts:
-              app01: {role: target, kind: windows, hostname: 10.0.0.5, username: u, domain: corp}
-            routes:
-              - {source: local, target: bastion1, hostname: b.example, port: 2222, protocol: ssh}
-              - source: bastion1
-                target: jump1
-                interactive: {hostname: localhost, port: 44001, protocol: rdp}
-                automation: {hostname: localhost, port: 45985, protocol: winrm}
-              - source: jump1
-                target: app01
-                automation: {hostname: 10.0.0.5, port: 5985, protocol: winrm}
+              app01:
+                role: target
+                kind: windows
+                username: u
+                domain: corp
+                via: {from: jump1, hostname: 10.0.0.5, port: 5985, protocol: winrm}
             """,
         )
-        assert inventory.routes_declared
         route = plan_route(inventory, "app01")
         assert route.channel == CHANNEL_NESTED_WINRM
         assert [leg.id for leg in route.legs] == ["bastion1", "jump1", "app01"]
@@ -338,19 +363,25 @@ class TestDeclarationStyles:
             tmp_path,
             """
             hops:
-              bastion1: {role: bastion, kind: ssh, hostname: b.example, port: 2222, username: u}
-              jump1: {role: jump, kind: windows, hostname: localhost, username: u}
+              bastion1:
+                role: bastion
+                kind: ssh
+                username: u
+                via: {from: local, hostname: b.example, port: 2222, protocol: ssh}
+              jump1:
+                role: jump
+                kind: windows
+                username: u
+                via:
+                  from: bastion1
+                  interactive: {hostname: localhost, port: 44001, protocol: rdp}
+                  automation: {hostname: localhost, port: 45985, protocol: winrm}
             hosts:
-              app01: {role: target, kind: windows, hostname: 10.0.0.5, username: u}
-            routes:
-              - {source: local, target: bastion1, hostname: b.example, port: 2222, protocol: ssh}
-              - source: bastion1
-                target: jump1
-                interactive: {hostname: localhost, port: 44001, protocol: rdp}
-                automation: {hostname: localhost, port: 45985, protocol: winrm}
-              - source: jump1
-                target: app01
-                automation: {hostname: 10.0.0.5, port: 5985, protocol: winrm}
+              app01:
+                role: target
+                kind: windows
+                username: u
+                via: {from: jump1, hostname: 10.0.0.5, port: 5985, protocol: winrm}
             """,
         )
         jump_leg = plan_route(inventory, "app01").leg_for("jump1")
@@ -359,47 +390,6 @@ class TestDeclarationStyles:
         assert jump_leg.endpoint.port == 45985
         assert jump_leg.interactive is not None and jump_leg.interactive.port == 44001
 
-    def test_path_shorthand_compiles_to_the_same_graph(self, tmp_path: Path) -> None:
-        inventory = inv(
-            tmp_path,
-            """
-            hops:
-              b1: {kind: ssh, hostname: b.example, port: 2222, username: u}
-            hosts:
-              app: {kind: linux, hostname: 10.0.0.9, path: [b1], username: u}
-            """,
-        )
-        assert not inventory.routes_declared
-        assert plan_route(inventory, "app").channel == CHANNEL_SSH
-        assert inventory.graph.entry_points() == ["b1"]
-
-    def test_shared_bastion_edges_are_deduplicated(self, tmp_path: Path) -> None:
-        inventory = inv(
-            tmp_path,
-            """
-            hops:
-              b1: {kind: ssh, hostname: b.example, port: 2222, username: u}
-            hosts:
-              a: {kind: linux, hostname: 10.0.0.1, path: [b1], username: u}
-              c: {kind: linux, hostname: 10.0.0.2, path: [b1], username: u}
-            """,
-        )
-        local_edges = [e for e in inventory.graph.edges if e.source == "local"]
-        assert len(local_edges) == 1
-
-    def test_a_route_naming_an_undeclared_node_is_rejected(self, tmp_path: Path) -> None:
-        with pytest.raises(ConfigError, match="not defined under 'hops:' or 'hosts:'"):
-            inv(
-                tmp_path,
-                """
-                hosts:
-                  app: {kind: linux, hostname: 10.0.0.1, username: u}
-                routes:
-                  - {source: local, target: ghost, hostname: g, port: 22, protocol: ssh}
-                  - {source: ghost, target: app, hostname: 10.0.0.1, port: 22, protocol: ssh}
-                """,
-            )
-
     def test_an_unroutable_host_fails_at_load_time(self, tmp_path: Path) -> None:
         """Fail fast: before the operator has typed a single password."""
         with pytest.raises(ConfigError, match="unroutable hosts"):
@@ -407,11 +397,12 @@ class TestDeclarationStyles:
                 tmp_path,
                 """
                 hops:
-                  b1: {kind: ssh, hostname: b.example, port: 2222, username: u}
+                  b1:
+                    kind: ssh
+                    username: u
+                    via: {from: local, hostname: b.example, port: 2222, protocol: ssh}
                 hosts:
                   stranded: {kind: linux, hostname: 10.0.0.1, username: u}
-                routes:
-                  - {source: local, target: b1, hostname: b.example, port: 2222, protocol: ssh}
                 """,
             )
 
@@ -441,14 +432,17 @@ class TestDomainAwareness:
             tmp_path,
             """
             hops:
-              b1: {kind: ssh, hostname: b.example, port: 2222, username: operator, domain: corp}
+              b1:
+                kind: ssh
+                username: operator
+                domain: corp
+                via: {from: local, hostname: b.example, port: 2222, protocol: ssh}
             hosts:
               app:
                 kind: windows
-                hostname: 10.0.0.5
                 username: jumpuser
                 domain: corp
-                path: [b1]
+                via: {from: b1, hostname: 10.0.0.5, port: 5985, protocol: winrm}
             """,
         )
         # Every kind qualifies: Windows auth needs it, and AD-joined Unix hosts
@@ -462,9 +456,15 @@ class TestDomainAwareness:
             tmp_path,
             """
             hops:
-              b1: {kind: ssh, hostname: b.example, port: 2222, username: operator}
+              b1:
+                kind: ssh
+                username: operator
+                via: {from: local, hostname: b.example, port: 2222, protocol: ssh}
             hosts:
-              app: {kind: linux, hostname: 10.0.0.5, username: gis, path: [b1]}
+              app:
+                kind: linux
+                username: gis
+                via: {from: b1, hostname: 10.0.0.5, port: 22, protocol: ssh}
             """,
         )
         assert inventory.hop("b1").qualified_user == "operator"
@@ -475,9 +475,15 @@ class TestDomainAwareness:
             tmp_path,
             """
             hops:
-              b1: {kind: ssh, hostname: b.example, port: 2222, username: operator@corp.net}
+              b1:
+                kind: ssh
+                username: operator@corp.net
+                via: {from: local, hostname: b.example, port: 2222, protocol: ssh}
             hosts:
-              app: {kind: linux, hostname: 10.0.0.5, username: gis, path: [b1]}
+              app:
+                kind: linux
+                username: gis
+                via: {from: b1, hostname: 10.0.0.5, port: 22, protocol: ssh}
             """,
         )
         assert inventory.hop("b1").qualified_user == "operator@corp.net"
@@ -494,8 +500,7 @@ class TestDomainAwareness:
                     hostname: 10.0.0.5
                     username: 'prod\\operator'
                     domain: corp
-                    path: []
-                    vars: {allow_direct: true}
+                    via: {from: local, hostname: 10.0.0.5, port: 5985, protocol: winrm}
                 """,
             )
 
@@ -510,8 +515,7 @@ class TestDomainAwareness:
                     hostname: 10.0.0.5
                     username: operator@prod.example.com
                     domain: corp
-                    path: []
-                    vars: {allow_direct: true}
+                    via: {from: local, hostname: 10.0.0.5, port: 5985, protocol: winrm}
                 """,
             )
 
@@ -526,8 +530,7 @@ class TestDomainAwareness:
                 hostname: 10.0.0.5
                 username: 'CORP\\jumpuser'
                 domain: corp
-                path: []
-                vars: {allow_direct: true}
+                via: {from: local, hostname: 10.0.0.5, port: 5985, protocol: winrm}
             """,
         )
         assert inventory.get("app").qualified_user == "CORP\\jumpuser"
@@ -541,8 +544,7 @@ class TestDomainAwareness:
                 kind: windows
                 hostname: 10.0.0.5
                 username: 'CORP\\opuser'
-                path: []
-                vars: {allow_direct: true}
+                via: {from: local, hostname: 10.0.0.5, port: 5985, protocol: winrm}
             """,
         )
         assert inventory.get("app").qualified_user == "CORP\\opuser"
@@ -552,15 +554,17 @@ class TestDomainAwareness:
             tmp_path,
             """
             hops:
-              b1: {kind: ssh, hostname: b.example, port: 2222, username: operator}
+              b1:
+                kind: ssh
+                username: operator
+                via: {from: local, hostname: b.example, port: 2222, protocol: ssh}
             hosts:
               app:
                 kind: windows
                 automation: ssh
-                hostname: 10.0.0.5
                 username: jumpuser
                 domain: corp
-                path: [b1]
+                via: {from: b1, hostname: 10.0.0.5, port: 22, protocol: ssh}
             """,
         )
         assert inventory.get("app").qualified_user == "corp\\jumpuser"

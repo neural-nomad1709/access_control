@@ -34,7 +34,7 @@ from .context import (
 )
 from .errors import ConfigError, RouteError
 from .paths import config_dir
-from .routegraph import LOCAL, Endpoint, RouteEdge, RouteGraph
+from .routegraph import LOCAL, RouteEdge, RouteGraph
 from .template import placeholders
 
 # --------------------------------------------------------------------------
@@ -216,8 +216,6 @@ class Hop(Node):
 class Host(Node):
     """A final target that operations run against."""
 
-    path: tuple[str, ...] = ()
-
     @property
     def host_id(self) -> str:
         return self.id
@@ -258,7 +256,7 @@ def _via_edge(
     username: str | None = None,
     description: str = "",
 ) -> RouteEdge:
-    """Turn one `via:` block into the same edge a `routes:` entry would produce.
+    """Turn one `via:` block into an edge of the route graph.
 
     Identity travels with the node, never with the edge: ``domain``/``username``
     are copied from the node record rather than restated here, so the two cannot
@@ -280,9 +278,9 @@ def _via_edge(
         data["username"] = username
     if description and "description" not in data:
         data["description"] = description
-    # Delegates to the same parser the `routes:` block uses, so the inline
-    # hostname/port/protocol shorthand, the RDP-cannot-automate rule and every
-    # error message are shared rather than reimplemented.
+    # Delegates to RouteEdge.parse, so the inline hostname/port/protocol
+    # shorthand, the RDP-cannot-automate rule and every error message live in
+    # one place.
     return RouteEdge.parse(data, where)
 
 
@@ -310,6 +308,12 @@ def _parse_node(
     read the few fields that only hosts have.
     """
     data = _as_mapping(raw, where)
+    if "path" in data:
+        raise ConfigError(
+            f"{where}.path: no longer supported. Declare how this machine is reached "
+            f"with a 'via:' block on it, e.g. via: {{from: bastion1, hostname: "
+            f"<its address as seen from bastion1>, port: 22, protocol: ssh}}."
+        )
     kind = str(data.get("kind", "ssh")).lower()
     if kind not in ALL_KINDS:
         raise ConfigError(f"{where}.kind: '{kind}' is not one of {sorted(ALL_KINDS)}")
@@ -410,14 +414,11 @@ class Inventory:
     hops: Mapping[str, Hop]
     hosts: Mapping[str, Host]
     source: Path | None = None
-    #: Explicit connectivity. Built from declared ``routes:`` edges, or compiled
-    #: from each host's ``path:`` shorthand -- both end up as the same graph.
+    #: Explicit connectivity, built from each node's own ``via:`` block.
     graph: RouteGraph = field(default_factory=RouteGraph)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     agent_prefix: str = "AGT"
     session_prefix: str = "SES"
-    #: True when connectivity came from an explicit ``routes:`` block.
-    routes_declared: bool = False
 
     def node_context(self, node_id: str) -> NetworkContext:
         node = self.hosts.get(node_id) or self.hops.get(node_id)
@@ -453,6 +454,14 @@ def load_inventory(path: str | Path | None = None) -> Inventory:
     """Load and validate ``inventory.yaml``."""
     resolved = _resolve_config_path(path, "inventory.yaml")
     raw = _read_yaml(resolved)
+    if "routes" in raw:
+        raise ConfigError(
+            f"{resolved}: the top-level 'routes:' block is no longer supported. Declare "
+            f"each machine's connectivity with a 'via:' block on the machine itself: move "
+            f"each edge onto its target, rename 'source' to 'from', drop 'target', and "
+            f"keep hostname/port/protocol as they are. Then delete the 'routes:' key, "
+            f"even if it is empty."
+        )
 
     #: Edges compiled from each node's own `via:` block, in declaration order.
     via_edges: list[RouteEdge] = []
@@ -474,14 +483,13 @@ def load_inventory(path: str | Path | None = None) -> Inventory:
             raise ConfigError(
                 f"{where}.host_id: '{declared_id}' does not match its key '{host_id}'"
             )
-        hop_path = _as_str_tuple(data.get("path"), f"{where}.path")
         if "package_share" in data:
             raise ConfigError(
                 f"{where}.package_share: paths belong to the job, not the machine. "
                 f"Declare it as a parameter of the operation that uses it and supply "
                 f"the value in the brief."
             )
-        host = Host(**fields, path=hop_path)
+        host = Host(**fields)
         hosts[str(host_id)] = host
         via_edges.extend(_via_edges(host, data, where))
 
@@ -492,32 +500,10 @@ def load_inventory(path: str | Path | None = None) -> Inventory:
     agent_raw = _as_mapping(raw.get("agent"), "agent")
 
     contexts = {node.id: node.context for node in (*hops.values(), *hosts.values())}
-    # Three ways to declare the same graph, most explicit first. `via:` on each
-    # node is the one to write: it keeps a machine's address next to its
-    # identity, so there is a single place to edit and nothing to keep in sync.
-    # A standalone `routes:` block still wins where one is present, and `path:`
-    # remains for the simple linear case.
-    routes_raw = raw.get("routes")
-    if routes_raw:
-        if not isinstance(routes_raw, Sequence) or isinstance(routes_raw, str):
-            raise ConfigError(f"{resolved}: 'routes' must be a list of edges")
-        edges = [RouteEdge.parse(item, f"routes[{i}]") for i, item in enumerate(routes_raw)]
-        if via_edges:
-            raise ConfigError(
-                f"{resolved}: connectivity is declared twice -- a top-level 'routes:' block "
-                f"and a 'via:' on "
-                f"{', '.join(sorted({e.target for e in via_edges})[:3])}. Pick one. "
-                f"'via:' is preferred: it keeps each machine's address beside its identity."
-            )
-        routes_declared = True
-    elif via_edges:
-        edges = via_edges
-        routes_declared = True
-    else:
-        edges = _compile_path_shorthand(hops, hosts)
-        routes_declared = False
-
-    graph = RouteGraph.build(edges, contexts)
+    # `via:` on each node is the only way to declare connectivity: it keeps a
+    # machine's address next to its identity, so there is a single place to
+    # edit and nothing to keep in sync.
+    graph = RouteGraph.build(via_edges, contexts)
 
     inventory = Inventory(
         hops=hops,
@@ -527,70 +513,9 @@ def load_inventory(path: str | Path | None = None) -> Inventory:
         logging=logging_config,
         agent_prefix=str(agent_raw.get("id_prefix", agent_raw.get("prefix", "AGT"))),
         session_prefix=str(agent_raw.get("session_prefix", "SES")),
-        routes_declared=routes_declared,
     )
     _validate_inventory(inventory)
     return inventory
-
-
-def _endpoint_for(node: Node, *, automation: bool) -> Endpoint | None:
-    """Turn a node's own settings into an endpoint, for the ``path:`` shorthand."""
-    if automation:
-        if node.automation == "none":
-            return None
-        protocol = "winrm" if node.automation == "winrm" else node.automation
-        port = node.winrm_port if node.automation == "winrm" else node.port
-        return Endpoint(hostname=node.host, port=port, protocol=protocol)
-    if node.interactive == "none":
-        return None
-    if node.interactive == "rdp":
-        return Endpoint(hostname=node.host, port=node.rdp_port, protocol="rdp")
-    return Endpoint(hostname=node.host, port=node.port, protocol="ssh")
-
-
-def _compile_path_shorthand(
-    hops: Mapping[str, Hop], hosts: Mapping[str, Host]
-) -> list[RouteEdge]:
-    """Compile each host's ``path:`` into explicit edges.
-
-    ``path: [bastion1, jump1]`` on a host is already an explicit statement of
-    intent; it is just a more compact one. Compiling it into the same graph the
-    ``routes:`` block produces means there is a single resolution engine, and a
-    single place where connectivity is validated.
-
-    Edges are de-duplicated: many hosts share a bastion, and each would
-    otherwise re-declare ``local -> bastion1``.
-    """
-    edges: dict[tuple[str, str], RouteEdge] = {}
-
-    def add(source: str, node: Node) -> None:
-        key = (source, node.id)
-        if key in edges:
-            return
-        edges[key] = RouteEdge(
-            source=source,
-            target=node.id,
-            automation=_endpoint_for(node, automation=True),
-            interactive=_endpoint_for(node, automation=False),
-            domain=node.domain,
-            username=node.user,
-            description=node.description,
-        )
-
-    for host in hosts.values():
-        previous = LOCAL
-        for hop_id in host.path:
-            hop = hops.get(hop_id)
-            if hop is None:
-                # Reported properly by _validate_inventory; skip here so the
-                # error names the host rather than failing inside the compiler.
-                previous = hop_id
-                continue
-            add(previous, hop)
-            previous = hop_id
-        add(previous, host)
-
-    return list(edges.values())
 
 
 def _validate_inventory(inventory: Inventory) -> None:
@@ -602,28 +527,6 @@ def _validate_inventory(inventory: Inventory) -> None:
             problems.append(
                 f"'{host.id}' is defined as both a hop and a host; ids must be unique"
             )
-
-        if not inventory.routes_declared:
-            seen: set[str] = set()
-            for hop_id in host.path:
-                if hop_id not in inventory.hops:
-                    problems.append(
-                        f"hosts.{host.id}.path references unknown hop '{hop_id}'"
-                    )
-                if hop_id in seen:
-                    problems.append(
-                        f"hosts.{host.id}.path visits hop '{hop_id}' more than once"
-                    )
-                seen.add(hop_id)
-            if not host.path and host.automation != "none":
-                # A direct connection bypasses every bastion, which is exactly
-                # what the hierarchy exists to prevent. Allowed, but only when
-                # said out loud.
-                if not host.vars.get("allow_direct"):
-                    problems.append(
-                        f"hosts.{host.id}: empty 'path' means connecting directly, bypassing "
-                        f"every bastion. Set vars.allow_direct: true if that is intended."
-                    )
 
     # Every declared route must name declared nodes.
     known = set(inventory.hops) | set(inventory.hosts) | {LOCAL}

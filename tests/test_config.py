@@ -59,67 +59,6 @@ class TestInventory:
         with pytest.raises(ConfigError, match="unknown host 'nope'.*win01"):
             inventory.get("nope")
 
-    def test_path_referencing_unknown_hop_is_rejected(self, tmp_path: Path) -> None:
-        path = write(
-            tmp_path,
-            "inv.yaml",
-            """
-            hops: {}
-            hosts:
-              h1:
-                host: 10.0.0.1
-                path: [ghost]
-            """,
-        )
-        with pytest.raises(ConfigError, match="unknown hop 'ghost'"):
-            load_inventory(path)
-
-    def test_empty_path_requires_explicit_opt_in(self, tmp_path: Path) -> None:
-        path = write(
-            tmp_path,
-            "inv.yaml",
-            """
-            hosts:
-              direct:
-                host: 10.0.0.1
-                path: []
-            """,
-        )
-        with pytest.raises(ConfigError, match="bypassing every bastion"):
-            load_inventory(path)
-
-    def test_empty_path_allowed_when_declared(self, tmp_path: Path) -> None:
-        path = write(
-            tmp_path,
-            "inv.yaml",
-            """
-            hosts:
-              direct:
-                host: 10.0.0.1
-                path: []
-                vars:
-                  allow_direct: true
-            """,
-        )
-        assert load_inventory(path).get("direct").path == ()
-
-    def test_duplicate_hop_in_path_is_rejected(self, tmp_path: Path) -> None:
-        path = write(
-            tmp_path,
-            "inv.yaml",
-            """
-            hops:
-              b:
-                host: b.example
-            hosts:
-              h:
-                host: 10.0.0.1
-                path: [b, b]
-            """,
-        )
-        with pytest.raises(ConfigError, match="more than once"):
-            load_inventory(path)
-
     def test_host_id_must_match_its_key(self, tmp_path: Path) -> None:
         path = write(
             tmp_path,
@@ -129,8 +68,7 @@ class TestInventory:
               h1:
                 host_id: something-else
                 host: 10.0.0.1
-                path: []
-                vars: {allow_direct: true}
+                via: {from: local, hostname: 10.0.0.1, port: 22, protocol: ssh}
             """,
         )
         with pytest.raises(ConfigError, match="does not match its key"):
@@ -146,8 +84,7 @@ class TestInventory:
                 kind: linux
                 host: 10.0.0.1
                 interactive: rdp
-                path: []
-                vars: {allow_direct: true}
+                via: {from: local, hostname: 10.0.0.1, port: 22, protocol: ssh}
             """,
         )
         with pytest.raises(ConfigError, match="'rdp' requires a windows kind"):
@@ -163,8 +100,7 @@ class TestInventory:
                 kind: linux
                 host: 10.0.0.1
                 automation: winrm
-                path: []
-                vars: {allow_direct: true}
+                via: {from: local, hostname: 10.0.0.1, port: 22, protocol: ssh}
             """,
         )
         with pytest.raises(ConfigError, match="only valid for windows nodes"):
@@ -178,66 +114,13 @@ class TestInventory:
             hosts:
               h1:
                 host: 10.0.0.1
-                path: []
-                vars: {allow_direct: true}
+                via: {from: local, hostname: 10.0.0.1, port: 22, protocol: ssh}
                 auth:
                   method: key
             """,
         )
         with pytest.raises(ConfigError, match="requires 'key_file'"):
             load_inventory(path)
-
-    def test_via_and_routes_compile_to_the_same_graph(self, tmp_path: Path) -> None:
-        """The two spellings are one graph, so `via:` inherits every guarantee."""
-        via = write(
-            tmp_path,
-            "via.yaml",
-            """
-            hops:
-              b:
-                kind: ssh
-                username: opsuser
-                domain: corp
-                description: entry
-                via: {from: local, hostname: b.example, port: 2222, protocol: ssh}
-            hosts:
-              h1:
-                kind: linux
-                username: appuser
-                domain: corp
-                description: target
-                via: {from: b, hostname: 10.0.0.1, port: 22, protocol: ssh}
-            """,
-        )
-        routes = write(
-            tmp_path,
-            "routes.yaml",
-            """
-            hops:
-              b:
-                kind: ssh
-                host: b.example
-                port: 2222
-                username: opsuser
-                domain: corp
-                description: entry
-            hosts:
-              h1:
-                kind: linux
-                host: 10.0.0.1
-                username: appuser
-                domain: corp
-                description: target
-            routes:
-              - {source: local, target: b, hostname: b.example, port: 2222,
-                 protocol: ssh, domain: corp, username: opsuser, description: entry}
-              - {source: b, target: h1, hostname: 10.0.0.1, port: 22,
-                 protocol: ssh, domain: corp, username: appuser, description: target}
-            """,
-        )
-        from_via = [e.to_dict() for e in load_inventory(via).graph.edges]
-        from_routes = [e.to_dict() for e in load_inventory(routes).graph.edges]
-        assert from_via == from_routes
 
     def test_via_takes_identity_from_the_node(self, tmp_path: Path) -> None:
         """The edge cannot disagree with the machine, because it never restates it."""
@@ -349,8 +232,8 @@ class TestInventory:
         with pytest.raises(ConfigError, match=r"hosts\.h1\.via\.from: required"):
             load_inventory(path)
 
-    def test_declaring_both_via_and_routes_is_rejected(self, tmp_path: Path) -> None:
-        """Two sources of truth is the bug this shape exists to remove."""
+    def test_a_routes_block_beside_via_is_still_refused(self, tmp_path: Path) -> None:
+        """Refused outright, not quietly ignored because `via:` is present."""
         path = write(
             tmp_path,
             "inv.yaml",
@@ -366,8 +249,118 @@ class TestInventory:
               - {source: b, target: h1, hostname: 10.0.0.1, port: 22, protocol: ssh}
             """,
         )
-        with pytest.raises(ConfigError, match="connectivity is declared twice"):
+        with pytest.raises(ConfigError, match="'routes:' block is no longer supported"):
             load_inventory(path)
+
+    def test_a_routes_block_is_refused_and_points_at_via(self, tmp_path: Path) -> None:
+        path = write(
+            tmp_path,
+            "inv.yaml",
+            """
+            hops:
+              b: {kind: ssh, host: b.example}
+            hosts:
+              h1: {kind: linux, host: 10.0.0.1}
+            routes:
+              - {source: local, target: b, hostname: b.example, port: 22, protocol: ssh}
+              - {source: b, target: h1, hostname: 10.0.0.1, port: 22, protocol: ssh}
+            """,
+        )
+        with pytest.raises(ConfigError, match=r"'routes:' block is no longer supported.*'via:'"):
+            load_inventory(path)
+
+    @pytest.mark.parametrize("leftover", ["routes:", "routes: []"])
+    def test_an_empty_routes_key_is_refused_and_says_to_delete_it(
+        self, tmp_path: Path, leftover: str
+    ) -> None:
+        """A leftover header with every entry commented out still names a
+        retired spelling; the message must say the key itself has to go."""
+        path = write(
+            tmp_path,
+            "inv.yaml",
+            f"""
+            hosts:
+              h1: {{kind: linux, via: {{from: local, hostname: 10.0.0.1, port: 22, protocol: ssh}}}}
+            {leftover}
+            """,
+        )
+        with pytest.raises(ConfigError, match="delete the 'routes:' key"):
+            load_inventory(path)
+
+    def test_path_on_a_host_is_refused_and_points_at_via(self, tmp_path: Path) -> None:
+        path = write(
+            tmp_path,
+            "inv.yaml",
+            """
+            hops:
+              b: {kind: ssh, host: b.example}
+            hosts:
+              h1: {kind: linux, host: 10.0.0.1, path: [b]}
+            """,
+        )
+        with pytest.raises(ConfigError, match=r"hosts\.h1\.path: no longer supported.*'via:'"):
+            load_inventory(path)
+
+    def test_path_alongside_via_is_refused_rather_than_ignored(self, tmp_path: Path) -> None:
+        """A `path:` that silently does nothing is a second, wrong source of truth."""
+        path = write(
+            tmp_path,
+            "inv.yaml",
+            """
+            hops:
+              b: {via: {from: local, hostname: b.example, port: 22, protocol: ssh}}
+            hosts:
+              h1:
+                kind: linux
+                path: [b]
+                via: {from: b, hostname: 10.0.0.1, port: 22, protocol: ssh}
+            """,
+        )
+        with pytest.raises(ConfigError, match=r"hosts\.h1\.path: no longer supported"):
+            load_inventory(path)
+
+    def test_path_on_a_hop_is_refused(self, tmp_path: Path) -> None:
+        path = write(
+            tmp_path,
+            "inv.yaml",
+            """
+            hops:
+              b:
+                path: [local]
+                via: {from: local, hostname: b.example, port: 22, protocol: ssh}
+            hosts:
+              h1: {kind: linux, via: {from: b, hostname: 10.0.0.1, port: 22, protocol: ssh}}
+            """,
+        )
+        with pytest.raises(ConfigError, match=r"hops\.b\.path: no longer supported"):
+            load_inventory(path)
+
+    def test_a_host_with_no_via_is_unroutable(self, tmp_path: Path) -> None:
+        """No declaration means no route -- never a direct connection."""
+        path = write(
+            tmp_path,
+            "inv.yaml",
+            """
+            hosts:
+              h1: {kind: linux, host: 10.0.0.1}
+            """,
+        )
+        with pytest.raises(ConfigError, match="No route defined"):
+            load_inventory(path)
+
+    def test_a_direct_connection_is_a_via_from_local(self, tmp_path: Path) -> None:
+        """Bypassing every bastion has to be declared, and this is how."""
+        path = write(
+            tmp_path,
+            "inv.yaml",
+            """
+            hosts:
+              h1:
+                kind: linux
+                via: {from: local, hostname: 10.0.0.1, port: 22, protocol: ssh}
+            """,
+        )
+        assert load_inventory(path).graph.resolve("h1").nodes == ("local", "h1")
 
     def test_node_without_hostname_or_via_is_rejected(self, tmp_path: Path) -> None:
         path = write(

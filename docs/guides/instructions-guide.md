@@ -217,7 +217,7 @@ statically. These are **errors** — the brief will not run:
 | Problem | Why it matters |
 |---|---|
 | Unknown host | Typo in `host:`, or the host was renamed |
-| Host has no usable route | Nothing in `routes:` reaches it |
+| Host has no usable route | No chain of `via:` blocks reaches it from `local` |
 | Unknown operation | Typo, or the operation was removed from the catalogue |
 | Operation not permitted on that host | Its `host_ids`/`tags` do not include this host — this is the check that stops a Windows patch job pointing at a Linux box |
 | Undeclared parameter | `mesage:` instead of `message:` would otherwise be silently dropped |

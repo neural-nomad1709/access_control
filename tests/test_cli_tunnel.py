@@ -37,17 +37,24 @@ def config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 description: Test bastion
                 auth:
                   method: password
+                via:
+                  from: local
+                  automation:  {hostname: 127.0.0.1, port: 22, protocol: ssh, preestablished: false}
+                  interactive: {hostname: 127.0.0.1, port: 22, protocol: ssh, preestablished: false}
 
             hosts:
               app01:
                 kind: linux
                 host: 10.0.0.101
                 port: 22
-                path: [bastion1]
                 user: opuser
                 description: Test application server
                 auth:
                   method: password
+                via:
+                  from: bastion1
+                  automation:  {hostname: 10.0.0.101, port: 22, protocol: ssh}
+                  interactive: {hostname: 10.0.0.101, port: 22, protocol: ssh}
             """
         ),
         encoding="utf-8",

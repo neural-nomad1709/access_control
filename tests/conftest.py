@@ -31,6 +31,10 @@ hops:
     auth:
       method: key+password
       key_file: ~/.ssh/id_test
+    via:
+      from: local
+      automation:  {hostname: bastion.example.net, port: 2222, protocol: ssh}
+      interactive: {hostname: bastion.example.net, port: 2222, protocol: ssh}
   jump1:
     kind: windows
     host: 10.0.0.10
@@ -38,33 +42,46 @@ hops:
     description: Windows jump server
     automation: winrm
     interactive: rdp
+    via:
+      from: bastion1
+      automation:  {hostname: 10.0.0.10, port: 5985, protocol: winrm}
+      interactive: {hostname: 10.0.0.10, port: 3389, protocol: rdp}
 
 hosts:
   lin01:
     kind: linux
     host: 10.0.0.20
-    path: [bastion1]
     user: opuser
     tags: [linux]
     auth:
       method: password
+    via:
+      from: bastion1
+      automation:  {hostname: 10.0.0.20, port: 22, protocol: ssh}
+      interactive: {hostname: 10.0.0.20, port: 22, protocol: ssh}
   win01:
     kind: windows
     host: 10.0.0.30
-    path: [bastion1, jump1]
     user: 'CORP\opuser'
     automation: winrm
     interactive: rdp
     tags: [windows, prod]
     vars:
       patch_share: 'D:\packages\patches'
+    via:
+      from: jump1
+      automation:  {hostname: 10.0.0.30, port: 5985, protocol: winrm}
+      interactive: {hostname: 10.0.0.30, port: 3389, protocol: rdp}
   win02:
     kind: windows
     host: 10.0.0.31
-    path: [bastion1]
     user: 'CORP\opuser'
     automation: winrm
     tags: [windows]
+    via:
+      from: bastion1
+      automation:  {hostname: 10.0.0.31, port: 5985, protocol: winrm}
+      interactive: {hostname: 10.0.0.31, port: 3389, protocol: rdp}
 """
 
 OPERATIONS_YAML = r"""

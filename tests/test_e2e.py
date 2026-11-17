@@ -98,7 +98,21 @@ class ScriptedPrompter:
         return [self._answer(title) for _ in prompts]
 
 
-def build_config(tmp_path: Path, bastion_port: int, target_port: int, key_file: Path) -> Path:
+def build_config(
+    tmp_path: Path,
+    bastion_port: int,
+    target_port: int,
+    key_file: Path,
+    *,
+    target_preestablished: bool | None = False,
+) -> Path:
+    """Both fakes listen on 127.0.0.1, so the target's address as seen from the
+    bastion is a loopback one. ``target_preestablished`` is written on that leg;
+    ``None`` leaves the key out, so the loopback guess decides."""
+    target_key = (
+        "" if target_preestablished is None
+        else f", preestablished: {str(target_preestablished).lower()}"
+    )
     directory = tmp_path / "config"
     directory.mkdir(exist_ok=True)
     (directory / "inventory.yaml").write_text(
@@ -114,18 +128,25 @@ def build_config(tmp_path: Path, bastion_port: int, target_port: int, key_file: 
                 auth:
                   method: key+password
                   key_file: {key_file.as_posix()}
+                via:
+                  from: local
+                  automation:  {{hostname: 127.0.0.1, port: {bastion_port}, protocol: ssh, preestablished: false}}
+                  interactive: {{hostname: 127.0.0.1, port: {bastion_port}, protocol: ssh, preestablished: false}}
 
             hosts:
               app01:
                 kind: linux
                 host: 127.0.0.1
                 port: {target_port}
-                path: [bastion1]
                 user: opuser
                 description: Test application server
                 tags: [linux]
                 auth:
                   method: password
+                via:
+                  from: bastion1
+                  automation:  {{hostname: 127.0.0.1, port: {target_port}, protocol: ssh{target_key}}}
+                  interactive: {{hostname: 127.0.0.1, port: {target_port}, protocol: ssh{target_key}}}
             """
         ),
         encoding="utf-8",
@@ -674,16 +695,23 @@ class TestChainFailures:
                         auth:
                           method: key+password
                           key_file: {client_key.as_posix()}
+                        via:
+                          from: local
+                          automation:  {{hostname: 127.0.0.1, port: {bastion.port}, protocol: ssh, preestablished: false}}
+                          interactive: {{hostname: 127.0.0.1, port: {bastion.port}, protocol: ssh, preestablished: false}}
                     hosts:
                       app01:
                         kind: linux
                         host: 127.0.0.1
                         port: {target.port}
-                        path: [bastion1]
                         user: opuser
                         description: Test application server
                         auth:
                           method: password
+                        via:
+                          from: bastion1
+                          automation:  {{hostname: 127.0.0.1, port: {target.port}, protocol: ssh, preestablished: false}}
+                          interactive: {{hostname: 127.0.0.1, port: {target.port}, protocol: ssh, preestablished: false}}
                     """
                 ),
                 encoding="utf-8",
@@ -1054,45 +1082,12 @@ class TestOperatorPrompt:
 # --------------------------------------------------------------------------
 
 
-def write_via_inventory(
-    config: Path, bastion_port: int, target_port: int, key_file: Path, *, target_leg_extra: str
-) -> None:
-    """The ``environment`` servers, declared with ``via:``.
-
-    Both fakes listen on 127.0.0.1, so the target's address as seen from the
-    bastion is a loopback one. ``target_leg_extra`` is appended to that leg.
-    """
-    (config / "inventory.yaml").write_text(
-        textwrap.dedent(
-            f"""
-            hops:
-              bastion1:
-                kind: ssh
-                user: opuser
-                description: Test bastion
-                auth:
-                  method: key+password
-                  key_file: {key_file.as_posix()}
-                via: {{from: local, hostname: 127.0.0.1, port: {bastion_port}, protocol: ssh}}
-            hosts:
-              app01:
-                kind: linux
-                user: opuser
-                description: Test application server
-                tags: [linux]
-                auth:
-                  method: password
-                via: {{from: bastion1, hostname: 127.0.0.1, port: {target_port}, protocol: ssh{target_leg_extra}}}
-            """
-        ),
-        encoding="utf-8",
-    )
-
-
 class TestLoopbackOnTheBastion:
-    def _connect(self, environment, tmp_path: Path, client_key: Path, extra: str):
-        config, bastion, target, _state = environment
-        write_via_inventory(config, bastion.port, target.port, client_key, target_leg_extra=extra)
+    def _connect(self, environment, tmp_path: Path, client_key: Path, preestablished):
+        _config, bastion, target, _state = environment
+        config = build_config(
+            tmp_path, bastion.port, target.port, client_key, target_preestablished=preestablished
+        )
         prompter = ScriptedPrompter(
             {"Test bastion": BASTION_PASSWORD, "Test application server": TARGET_PASSWORD}
         )
@@ -1106,9 +1101,7 @@ class TestLoopbackOnTheBastion:
     ) -> None:
         """`preestablished: false` means the bastion's own 127.0.0.1, so the
         bastion must carry the connection rather than this machine dialling it."""
-        bastion, target = self._connect(
-            environment, tmp_path, client_key, ", preestablished: false"
-        )
+        bastion, target = self._connect(environment, tmp_path, client_key, False)
         assert bastion.forwards == [("127.0.0.1", target.port)]
         assert target.policy.attempts == ["password"]
 
@@ -1117,6 +1110,6 @@ class TestLoopbackOnTheBastion:
     ) -> None:
         """Configs that never wrote the key keep their meaning: a loopback
         address is the local end of a tunnel that already exists."""
-        bastion, target = self._connect(environment, tmp_path, client_key, "")
+        bastion, target = self._connect(environment, tmp_path, client_key, None)
         assert bastion.forwards == []
         assert target.policy.attempts == ["password"]

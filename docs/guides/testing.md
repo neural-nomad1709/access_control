@@ -16,7 +16,7 @@ against a mock.
 
 | File | Tests | Covers |
 |---|---:|---|
-| `test_config.py` | 44 | Inventory and catalog parsing, `via:` compilation, validation, host_id/tag binding, variable resolution |
+| `test_config.py` | 47 | Inventory and catalog parsing, `via:` compilation, validation, host_id/tag binding, variable resolution |
 | `test_route.py` | 14 | Every route shape and every rejected topology |
 | `test_routegraph.py` | 71 | Declared edges, resolution, mandatory ports, pre-established tunnels, environment boundaries, domain qualifying, agent identity, logging config |
 | `test_security.py` | 65 | Redaction, the command deny-list, credential handling |
@@ -29,7 +29,7 @@ against a mock.
 | `test_cli_brief_postcheck.py` | 4 | A brief's `postcheck:` block actually runs |
 | `test_campaign.py` | 11 | Campaign parsing, offline planning and retargeting, concurrent dispatch with a fake client, skip-on-no-session, per-target isolation |
 | `test_cli_tunnel.py` | 4 | `ac tunnel --port` reaches the transport, attached and ephemeral |
-| `test_cli_interactive_leg.py` | 11 | `ac shell` / `ac rdp` dial the route leg's address and use a pre-established forward as it is; `ac rdp` records `RDP_LAUNCH` |
+| `test_cli_interactive_leg.py` | 12 | `ac shell` / `ac rdp` dial the route leg's address and use a pre-established forward as it is; `ac rdp` records `RDP_LAUNCH` |
 | `test_cli_brief_duration.py` | 4 | `rules.max_duration_minutes` stops a brief from starting further operations |
 | `test_logging_setup.py` | 9 | `logging.level` sets `transport.log` verbosity; `transport.log` and `errors.log` roll over by size |
 | `test_cli_output_encoding.py` | 2 | Remote output cannot abort the CLI on a cp1252 console |
@@ -42,7 +42,7 @@ against a mock.
 | `test_local_approvals.py` | 32 | An agent's gated request is held until the operator approves: the local approval store, the engine, the session socket, the prompt, and clients declaring an agent caller |
 | `test_packaging_independence.py` | 9 | The standalone install names no AgentLighthouse package and no source outside the repo |
 | `test_e2e.py` | 21 | Two full cycles, the agent path (including gated work over MCP waiting for `:approve`), chain failure modes, hop fallback, forwarding detection, probe reporting — over real SSH |
-| **Total (standalone)** | **536** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
+| **Total (standalone)** | **540** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
 
 Counts move as tests are added; `uv run pytest` is the authority. On a machine
 that has had the integrated install, run `uv sync --extra dev` first, or the

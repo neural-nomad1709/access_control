@@ -165,17 +165,16 @@ ERROR: No route defined between requested target and available bastion.
 Routes are never discovered; a direct connection will not be attempted.
 ```
 
-### Declaration styles
+### Declaring connectivity
 
-| Style | Shape | Status |
-|---|---|---|
-| `via:` on each node | The leg lives inside the block of the machine it reaches | **Preferred** |
-| Top-level `routes:` list | `{source, target, hostname, port, protocol}` edges | Accepted |
-| Per-host `path: [bastion1, jump1]` | Uses each node's own `hostname`/`port` | Accepted, simplest linear case |
+`via:` on each node is the only declaration style: the leg lives inside the block
+of the machine it reaches, so there is one place to edit. Each `via:` block
+compiles to one edge of the graph that resolution walks.
 
-All three compile to the same edge set and one resolution engine. Combining
-`via:` with a top-level `routes:` block in one file is **refused at load time** —
-connectivity declared in two places is exactly the drift `via:` exists to prevent.
+The older top-level `routes:` list and per-node `path:` shorthand are **refused at
+load time**, with a message saying how to convert them. A `path:` used to be
+silently ignored when `via:` was also present; refusing it removes that second,
+dead source of truth.
 
 ### Rules enforced during resolution
 
@@ -188,7 +187,7 @@ connectivity declared in two places is exactly the drift `via:` exists to preven
 | An intermediate hop must be automatable | An interactive-only jump server cannot launch the next leg |
 | At most one Windows jump server | Nesting `Invoke-Command` deeper means passing a credential through an intermediate script |
 | SSH may not follow WinRM in a chain | Chaining back to SSH from a Windows jump is unsupported |
-| An empty `path:` needs `vars.allow_direct: true` | A direct connection bypasses every bastion, so it must be said out loud |
+| A direct connection is `via: {from: local, …}` on the target | It bypasses every bastion, so it must be declared like any other leg |
 
 Every one of these is raised when the config is **read**, not when you connect.
 `config.load_inventory` resolves every host at load time for this reason.

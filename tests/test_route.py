@@ -90,15 +90,27 @@ class TestRejections:
                 tmp_path,
                 """
                 hops:
-                  b: {kind: ssh, host: b.example}
-                  w: {kind: windows, host: 10.0.0.1, user: u}
-                  b2: {kind: ssh, host: b2.example}
+                  b:
+                    kind: ssh
+                    via: {from: local, hostname: b.example, port: 22, protocol: ssh}
+                  w:
+                    kind: windows
+                    user: u
+                    via:
+                      from: b
+                      automation:  {hostname: 10.0.0.1, port: 5985, protocol: winrm}
+                      interactive: {hostname: 10.0.0.1, port: 3389, protocol: rdp}
+                  b2:
+                    kind: ssh
+                    via: {from: w, hostname: b2.example, port: 22, protocol: ssh}
                 hosts:
                   t:
                     kind: windows
-                    host: 10.0.0.2
                     user: u
-                    path: [b, w, b2]
+                    via:
+                      from: b2
+                      automation:  {hostname: 10.0.0.2, port: 5985, protocol: winrm}
+                      interactive: {hostname: 10.0.0.2, port: 3389, protocol: rdp}
                 """,
             )
 
@@ -108,15 +120,22 @@ class TestRejections:
                 tmp_path,
                 """
                 hops:
-                  b: {kind: ssh, host: b.example}
-                  w1: {kind: windows, host: 10.0.0.1, user: u}
-                  w2: {kind: windows, host: 10.0.0.2, user: u}
+                  b:
+                    kind: ssh
+                    via: {from: local, hostname: b.example, port: 22, protocol: ssh}
+                  w1:
+                    kind: windows
+                    user: u
+                    via: {from: b, hostname: 10.0.0.1, port: 5985, protocol: winrm}
+                  w2:
+                    kind: windows
+                    user: u
+                    via: {from: w1, hostname: 10.0.0.2, port: 5985, protocol: winrm}
                 hosts:
                   t:
                     kind: windows
-                    host: 10.0.0.3
                     user: u
-                    path: [b, w1, w2]
+                    via: {from: w2, hostname: 10.0.0.3, port: 5985, protocol: winrm}
                 """,
             )
 
@@ -127,13 +146,17 @@ class TestRejections:
                 tmp_path,
                 """
                 hops:
-                  b: {kind: ssh, host: b.example}
-                  w: {kind: windows, host: 10.0.0.1, user: u}
+                  b:
+                    kind: ssh
+                    via: {from: local, hostname: b.example, port: 22, protocol: ssh}
+                  w:
+                    kind: windows
+                    user: u
+                    via: {from: b, hostname: 10.0.0.1, port: 5985, protocol: winrm}
                 hosts:
                   t:
                     kind: linux
-                    host: 10.0.0.2
-                    path: [b, w]
+                    via: {from: w, hostname: 10.0.0.2, port: 22, protocol: ssh}
                 """,
             )
 
@@ -142,14 +165,15 @@ class TestRejections:
             tmp_path,
             """
             hops:
-              b: {kind: ssh, host: b.example}
+              b:
+                kind: ssh
+                via: {from: local, hostname: b.example, port: 22, protocol: ssh}
             hosts:
               t:
                 kind: windows
-                host: 10.0.0.2
                 user: u
                 automation: none
-                path: [b]
+                via: {from: b, hostname: 10.0.0.2, port: 3389, protocol: rdp}
             """,
         )
         with pytest.raises(RouteError, match="ac rdp t"):

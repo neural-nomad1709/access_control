@@ -86,8 +86,10 @@ logging: {...}
 agent:   {...}
 hops:    {...}      # machines on the way: bastions, jump servers
 hosts:   {...}      # final targets (at least one required)
-routes:  [...]      # older alternative to per-node `via:` — cannot be combined with it
 ```
+
+Connectivity lives in each node's `via:` block. The older top-level `routes:`
+list is refused; see §3.7.
 
 ### 3.1 `logging:`
 
@@ -123,7 +125,7 @@ variable, then the generated form.
 | `domain` | string | `""` | Qualifies a bare username to `DOMAIN\user` on **every** node kind |
 | `description` | string | `""` | Shown on the password prompt — make it unambiguous |
 | `tags` | list[str] | `[]` | How operations bind to hosts |
-| `vars` | mapping | `{}` | Extra `{{placeholders}}` for operation templates. `allow_direct: true` permits an empty `path:` |
+| `vars` | mapping | `{}` | Extra `{{placeholders}}` for operation templates |
 | `context` | mapping | empty | See below |
 | `auth` | mapping | see below | Never contains a secret |
 | `port` | int | `22`, or the SSH port from `via:` | SSH port |
@@ -132,7 +134,6 @@ variable, then the generated form.
 | `automation` | enum | `winrm` for Windows kinds, `ssh` otherwise | `ssh` \| `winrm` \| `wmi` \| `none`. Non-Windows kinds may only use `ssh` or `none` |
 | `interactive` | enum | `rdp` for Windows kinds, `ssh` otherwise | `rdp` \| `ssh` \| `none`. `rdp` requires a Windows kind |
 | `via` | mapping or list | — | How this machine is reached. See §3.5 |
-| `path` | list[str] | `()` | **hosts only.** Older linear shorthand: the ordered hop ids |
 | `host_id` | string | the key | **hosts only.** If present it must equal the key |
 
 Rejected outright:
@@ -217,33 +218,25 @@ key is offered, the server replies with a partial success, and the password
 completes the login. Setting `password` alone against such a server fails after
 the key stage.
 
-### 3.7 `routes:` — the older declaration style
+### 3.7 `routes:` and `path:` — refused
 
-```yaml
-routes:
-  - source: local
-    target: bastion1
-    hostname: bastion1.example.net
-    port: 2222
-    protocol: ssh
-  - source: bastion1
-    target: jump1
-    automation:  {hostname: 10.20.4.11, port: 5985, protocol: winrm}
-    interactive: {hostname: 10.20.4.11, port: 3389, protocol: rdp}
-```
+Both older declaration styles are refused at load time, with a message saying
+how to convert:
 
-Accepted, and compiles to exactly the same graph. It **cannot be combined with
-any `via:` block in the same file** — connectivity declared twice is refused at
-load time. Per-host `path: [bastion1, jump1]` is the third accepted style and
-uses each node's own `hostname`/`port`.
+| Old | Becomes |
+|---|---|
+| A top-level `routes:` entry `{source: X, target: Y, hostname, port, protocol}` | On node `Y`: `via: {from: X, hostname, port, protocol}` |
+| `path: [bastion1, jump1]` on a node | A `via:` on each machine in the chain, each giving its address as seen from the one before |
+
+A direct connection that bypasses every bastion is declared the same way, as
+`via: {from: local, …}` on the target.
 
 ### 3.8 Load-time validation
 
 Everything below is raised when the file is *read*, before any socket opens:
 
 - an id defined as both a hop and a host,
-- a `path:` naming an unknown hop or visiting one twice,
-- an empty `path:` without `vars.allow_direct: true`,
+- a top-level `routes:` list, or a `path:` on any node,
 - an edge naming a node that is not declared,
 - a duplicate `source → target` pair,
 - a port outside 1–65535, or missing,
@@ -516,7 +509,7 @@ Review these before running against production.
 | `logging.enabled: false` | No audit trail on disk | Leave `true` |
 | `logging.path` inside the repo | Captured server output syncs to the cloud | Keep it outside the repository |
 | `logging.retention_days: 0` | Trails accumulate forever | Match your retention policy; 30 is the default |
-| `vars.allow_direct: true` | Bypasses every bastion for that host | Only for a genuinely direct/VPN route, and say so in `description` |
+| `via: {from: local, …}` on a target | Bypasses every bastion for that host | Only for a genuinely direct/VPN route, and say so in `description` |
 | `context.environment` left blank | The QA→PROD boundary check silently does nothing | Set it on every node |
 | `--idle-timeout 0` | An authenticated session with live credentials lives until the window is closed | Keep a bounded timeout |
 | `host_ids: ['*']` | Every operation applies to every host | Use tags or explicit ids |

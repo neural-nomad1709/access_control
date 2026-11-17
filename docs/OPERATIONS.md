@@ -413,9 +413,9 @@ the command is sent.
 ### 8.5 Configuration compatibility
 
 Config is loaded with strict validation and reports every problem in one pass, so
-an incompatible file fails at `ac doctor` rather than mid-run. The older
-declaration styles (`routes:` and per-host `path:`) still load; only combining
-them with `via:` is refused.
+an incompatible file fails at `ac doctor` rather than mid-run. Connectivity is
+declared only with `via:`. A file still using the older top-level `routes:` list
+or a per-node `path:` is refused, and the error says how to convert it.
 
 ---
 

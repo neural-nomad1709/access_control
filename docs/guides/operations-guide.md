@@ -161,16 +161,12 @@ Points worth understanding:
 - **A machine reachable two ways** may give `via:` a list of blocks. Two ways in
   of equal length are still refused as ambiguous.
 
-### Older spellings
+### Older spellings are refused
 
-A standalone `routes:` list of `{source, target, hostname, port, protocol}`
-edges, and a per-host `path: [bastion1]` shorthand that uses each node's own
-hostname and port, both still load and compile to the same graph.
-
-Don't mix them with `via:` in one file. A `routes:` block alongside `via:` is
-refused at load time ("connectivity is declared twice"). A `path:` alongside
-`via:` or `routes:` is **not** refused: it is silently ignored, and the route
-comes from `via:` / `routes:` alone.
+`via:` is the only way to declare a leg. A top-level `routes:` list or a `path:`
+on any node is refused when the file is read, with a message saying how to move
+it onto `via:`. [CONFIGURATION.md §3.7](../CONFIGURATION.md#37-routes-and-path--refused)
+has the conversion table.
 
 ### Then confirm it
 

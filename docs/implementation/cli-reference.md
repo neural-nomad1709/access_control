@@ -53,8 +53,7 @@ permitted on that host. Columns: id, what it applies to, parameters (a trailing
 ### `ac routes [<host>] [--json]`
 
 Without an argument: every declared edge (source, target, automation endpoint,
-interactive endpoint, domain), whether connectivity came from `routes:`/`via:` or
-the `path:` shorthand, and the entry points reachable from `local`.
+interactive endpoint, domain) and the entry points reachable from `local`.
 
 With a host: resolves that one route and prints it verbosely with per-hop
 addresses, protocols, pre-established markers and network context, plus the

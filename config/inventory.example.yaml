@@ -239,12 +239,10 @@ hosts:
       interactive: {hostname: win-app02.corp.net, port: 3389, protocol: rdp}
 
 # ---------------------------------------------------------------------------
-# OLDER SPELLINGS -- still accepted, no longer the recommended shape
+# OLDER SPELLINGS -- refused
 #
-# A standalone `routes:` list of {source, target, hostname, port, protocol}
-# edges, and a per-host `path: [bastion1, jump1]` shorthand that uses each
-# node's own `hostname`/`port`, both still load and compile to the same graph.
-#
-# Don't mix them with `via:` in one file. A `routes:` block alongside `via:`
-# is refused at load time. A `path:` alongside `via:` is silently ignored.
+# A top-level `routes:` list and a per-node `path: [bastion1, jump1]` are both
+# refused at load time. Move each leg onto the machine it reaches as a `via:`
+# block: a routes entry {source: X, target: Y, ...} becomes, on Y,
+# via: {from: X, hostname, port, protocol}.
 # ---------------------------------------------------------------------------
