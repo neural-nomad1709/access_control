@@ -1047,3 +1047,76 @@ class TestOperatorPrompt:
                 assert "this is app01" in printed
             finally:
                 session.close()
+
+
+# --------------------------------------------------------------------------
+# A target on the bastion's own loopback
+# --------------------------------------------------------------------------
+
+
+def write_via_inventory(
+    config: Path, bastion_port: int, target_port: int, key_file: Path, *, target_leg_extra: str
+) -> None:
+    """The ``environment`` servers, declared with ``via:``.
+
+    Both fakes listen on 127.0.0.1, so the target's address as seen from the
+    bastion is a loopback one. ``target_leg_extra`` is appended to that leg.
+    """
+    (config / "inventory.yaml").write_text(
+        textwrap.dedent(
+            f"""
+            hops:
+              bastion1:
+                kind: ssh
+                user: opuser
+                description: Test bastion
+                auth:
+                  method: key+password
+                  key_file: {key_file.as_posix()}
+                via: {{from: local, hostname: 127.0.0.1, port: {bastion_port}, protocol: ssh}}
+            hosts:
+              app01:
+                kind: linux
+                user: opuser
+                description: Test application server
+                tags: [linux]
+                auth:
+                  method: password
+                via: {{from: bastion1, hostname: 127.0.0.1, port: {target_port}, protocol: ssh{target_leg_extra}}}
+            """
+        ),
+        encoding="utf-8",
+    )
+
+
+class TestLoopbackOnTheBastion:
+    def _connect(self, environment, tmp_path: Path, client_key: Path, extra: str):
+        config, bastion, target, _state = environment
+        write_via_inventory(config, bastion.port, target.port, client_key, target_leg_extra=extra)
+        prompter = ScriptedPrompter(
+            {"Test bastion": BASTION_PASSWORD, "Test application server": TARGET_PASSWORD}
+        )
+        session = make_session(config, prompter, tmp_path)
+        session.connect()
+        session.close()
+        return bastion, target
+
+    def test_an_explicit_false_is_forwarded_by_the_bastion(
+        self, environment, tmp_path: Path, client_key: Path
+    ) -> None:
+        """`preestablished: false` means the bastion's own 127.0.0.1, so the
+        bastion must carry the connection rather than this machine dialling it."""
+        bastion, target = self._connect(
+            environment, tmp_path, client_key, ", preestablished: false"
+        )
+        assert bastion.forwards == [("127.0.0.1", target.port)]
+        assert target.policy.attempts == ["password"]
+
+    def test_without_the_key_a_loopback_leg_is_still_a_local_tunnel(
+        self, environment, tmp_path: Path, client_key: Path
+    ) -> None:
+        """Configs that never wrote the key keep their meaning: a loopback
+        address is the local end of a tunnel that already exists."""
+        bastion, target = self._connect(environment, tmp_path, client_key, "")
+        assert bastion.forwards == []
+        assert target.policy.attempts == ["password"]

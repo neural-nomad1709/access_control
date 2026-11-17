@@ -179,7 +179,9 @@ Reported per bastion as `tcp forwarding: yes|NO`.
 
 `preestablished: true` (implied by a loopback address) means a forward already
 exists — mRemoteNG's SSH-tunnel entry, or your own `ssh -L`. The tool dials it
-instead of building a second one on top.
+instead of building a second one on top. For a service bound to the source
+node's own `localhost` instead, write `preestablished: false` on the leg; an
+explicit value always wins over the loopback guess.
 
 ```yaml
 automation: {hostname: localhost, port: 45985, protocol: winrm, preestablished: true}

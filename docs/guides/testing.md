@@ -18,7 +18,7 @@ against a mock.
 |---|---:|---|
 | `test_config.py` | 44 | Inventory and catalog parsing, `via:` compilation, validation, host_id/tag binding, variable resolution |
 | `test_route.py` | 14 | Every route shape and every rejected topology |
-| `test_routegraph.py` | 65 | Declared edges, resolution, mandatory ports, pre-established tunnels, environment boundaries, domain qualifying, agent identity, logging config |
+| `test_routegraph.py` | 71 | Declared edges, resolution, mandatory ports, pre-established tunnels, environment boundaries, domain qualifying, agent identity, logging config |
 | `test_security.py` | 65 | Redaction, the command deny-list, credential handling |
 | `test_engine.py` | 60 | Templating, exit-code parsing, expectations, gating, dry run, failure diagnosis, the operation report, canonical actions, timeline |
 | `test_daemon.py` | 22 | Session descriptors and the loopback protocol, over real sockets |
@@ -41,8 +41,8 @@ against a mock.
 | `test_operator_shell_approve.py` | 7 | The `:approve` verb at the operator prompt |
 | `test_local_approvals.py` | 32 | An agent's gated request is held until the operator approves: the local approval store, the engine, the session socket, the prompt, and clients declaring an agent caller |
 | `test_packaging_independence.py` | 9 | The standalone install names no AgentLighthouse package and no source outside the repo |
-| `test_e2e.py` | 19 | Two full cycles, the agent path (including gated work over MCP waiting for `:approve`), chain failure modes, hop fallback, forwarding detection, probe reporting — over real SSH |
-| **Total (standalone)** | **528** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
+| `test_e2e.py` | 21 | Two full cycles, the agent path (including gated work over MCP waiting for `:approve`), chain failure modes, hop fallback, forwarding detection, probe reporting — over real SSH |
+| **Total (standalone)** | **536** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
 
 Counts move as tests are added; `uv run pytest` is the authority. On a machine
 that has had the integrated install, run `uv sync --extra dev` first, or the

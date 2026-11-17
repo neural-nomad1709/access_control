@@ -149,6 +149,8 @@ Points worth understanding:
 - **`preestablished: true`** means a tunnel already exists and this tool should
   dial it rather than build a second one on top. A loopback address implies it,
   because treating `localhost` as a real host would connect to your own machine.
+  For a service on the bastion's **own** `localhost`, write
+  `preestablished: false` on that leg: an explicit value always wins.
   Start such a tunnel yourself:
   `ssh -p 2222 -L 44001:jump:3389 -L 45985:jump:5985 operator@bastion1.example.net`
 - **`automation` and `interactive` are separate** because RDP carries pixels and

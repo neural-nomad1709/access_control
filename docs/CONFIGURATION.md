@@ -175,7 +175,7 @@ via:
 | `hostname` (alias `host`) | yes, per endpoint | **As seen from `from:`** — the same machine has different addresses from different vantage points |
 | `port` | **yes** | Never defaulted. The error names what the default would have been |
 | `protocol` | yes | `ssh` \| `winrm` \| `winrm-ssl` \| `rdp` \| `wmi` |
-| `preestablished` | no (default `false`) | The address is the local end of a forward that already exists, so no second tunnel is built. **Implied automatically by `localhost` / `127.0.0.1` / `::1`** |
+| `preestablished` | no (default `false`) | The address is the local end of a forward that already exists, so no second tunnel is built. **Implied automatically by `localhost` / `127.0.0.1` / `::1`** when not set. Write `false` explicitly for a service on the source node's own loopback, which the source then forwards to |
 | `description` | no | Inherited from the node when omitted |
 
 Rules:

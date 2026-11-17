@@ -418,8 +418,10 @@ usually simpler:
       interactive: {hostname: 10.20.4.11, port: 3389, protocol: rdp}
 ```
 
-A loopback address always implies `preestablished`, because treating `localhost`
-as a real host would connect to your own machine.
+A loopback address implies `preestablished` unless the leg says otherwise,
+because treating `localhost` as a real host would connect to your own machine.
+If the target really is a service on the **bastion's own** `localhost`, write
+`preestablished: false` on that leg and the bastion forwards to it.
 
 ---
 

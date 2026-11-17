@@ -75,7 +75,9 @@ agent:
 #
 # `preestablished: true` means the address is the local end of a tunnel that
 # already exists (an mRemoteNG SSH-tunnel entry, say), so this tool dials it
-# rather than building a second forward on top. A loopback address implies it.
+# rather than building a second forward on top. A loopback address implies it,
+# unless the leg says `preestablished: false` -- which means a service on the
+# `from:` node's own localhost, reached by that node forwarding to it.
 #
 # A machine reachable from more than one place may give `via:` a list of blocks.
 # Two ways in of equal length are still refused as ambiguous -- declaring

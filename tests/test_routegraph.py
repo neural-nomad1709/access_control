@@ -98,6 +98,19 @@ class TestEndpoints:
         )
         assert endpoint.preestablished is False
 
+    @pytest.mark.parametrize("loopback", ["localhost", "127.0.0.1", "::1"])
+    @pytest.mark.parametrize("key", ["preestablished", "tunnel_preestablished"])
+    def test_an_explicit_false_overrides_the_loopback_guess(self, loopback: str, key: str) -> None:
+        """A service bound to the *bastion's own* loopback is a real target.
+
+        Without a way to say so, the leg to it would be dialled from the
+        operator's machine instead of forwarded by the bastion.
+        """
+        endpoint = Endpoint.parse(
+            {"hostname": loopback, "port": 8080, "protocol": "ssh", key: False}, "routes[0]"
+        )
+        assert endpoint.preestablished is False
+
 
 class TestEdgeParsing:
     def test_rdp_cannot_be_an_automation_protocol(self) -> None:

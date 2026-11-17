@@ -105,12 +105,16 @@ class Endpoint:
         if not 1 <= port <= 65535:
             raise ConfigError(f"{where}.port: {port} is outside 1-65535")
 
-        preestablished = bool(data.get("preestablished", data.get("tunnel_preestablished", False)))
-        if hostname.lower() in ("localhost", "127.0.0.1", "::1") and not preestablished:
-            # A loopback address on an edge can only mean a forward that already
-            # exists; treating it as a real host would connect to the operator's
-            # own machine.
-            preestablished = True
+        declared = data.get("preestablished", data.get("tunnel_preestablished"))
+        if declared is not None:
+            preestablished = bool(declared)
+        else:
+            # Unless told otherwise, a loopback address on an edge means the
+            # local end of a forward that already exists; treating it as a real
+            # host would connect to the operator's own machine. An explicit
+            # `preestablished: false` says it is the source node's own loopback
+            # (a service bound to the bastion's localhost), reached by forwarding.
+            preestablished = hostname.lower() in ("localhost", "127.0.0.1", "::1")
 
         return cls(hostname=hostname, port=port, protocol=protocol, preestablished=preestablished)
 
