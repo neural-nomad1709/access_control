@@ -35,6 +35,9 @@ config/inventory copy.yaml
 reports/
 BizTalk-Installation/
 scripts/
+# Task work lives in a Tasks folder next to this repo, not inside it. This line only
+# guards against a Tasks folder being recreated in here by mistake.
+Tasks/
 
 
 # Local, per-user overrides and the unmasked twins of committed documents.

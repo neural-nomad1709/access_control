@@ -301,6 +301,25 @@ conversation.
 
 ---
 
+## "Add-Content: Cannot process command because of one or more missing mandatory parameters: Value"
+
+You typed bare `ac` in PowerShell, with the venv activated. PowerShell ships `ac`
+as a built-in alias for `Add-Content`, and the alias wins over the venv's
+`ac.exe`. Nothing ran against any host.
+
+Call the executable by its full name, or go through uv:
+
+```powershell
+ac.exe status
+uv run ac status
+```
+
+To find a live session from a fresh window, `ac.exe status` lists each host with
+its session id, pid and agent id. Every other command attaches by the **host id**
+from that list, not by the `SES-…` id.
+
+---
+
 ## WinRM is closed on the jump server or target
 
 `ac probe <host>` shows `winrm-http: False` and a `bootstrap-needed` verdict.

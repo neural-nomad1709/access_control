@@ -113,8 +113,12 @@ A plain venv works too, though `uv run` is what every example in the docs uses:
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e ".[dev]"
-ac doctor
+ac.exe doctor
 ```
+
+In PowerShell, type `ac.exe`, not bare `ac`. PowerShell ships `ac` as a built-in
+alias for `Add-Content`, so `ac doctor` fails with "missing mandatory parameters:
+Value". `uv run ac …` is unaffected, and so are cmd.exe and Git Bash.
 
 This install is the standalone product. It contains no AgentLighthouse package
 and does not need an AgentLighthouse checkout on the machine. Running integrated
