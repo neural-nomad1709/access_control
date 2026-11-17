@@ -19,7 +19,7 @@ brief:
 
   requested_by: j.doe         # Who asked for this
   change_ref: CHG0001234          # Ticket, so the run is traceable
-  window: "2026-08-12 22:00-23:00 AEST"
+  window: "2026-08-12 22:00-23:00 AEST"   # free text for the record; not enforced
   description: >-
     A paragraph for whoever reads this at 3am. Why is this being done, what is
     the expected impact, and what should they know that is not obvious from the
@@ -99,7 +99,7 @@ rules:
   confirm_destructive: true       # the operator approves each gated operation
   stop_on_first_failure: true
   reboot_allowed: false           # a brief containing a rebooting operation is rejected
-  max_duration_minutes: 60
+  max_duration_minutes: 60        # enforced: no operation starts after this (0 = no ceiling)
   allow_diagnostic_commands: true # read-only investigation when something fails
   allow_unlisted_operations: false
 

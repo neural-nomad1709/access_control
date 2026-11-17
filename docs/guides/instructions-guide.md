@@ -195,12 +195,13 @@ the agent and the reader:
 | `reboot_allowed` | **Yes.** If any listed operation contains a step that could restart the host, the brief is refused at validation time, with the operation named |
 | `stop_on_first_failure` | **Yes**, by `ac brief run` — after each step's own `on_failure` has had its say |
 | `confirm_destructive` | No. Gating comes from the catalogue plus `--confirm`; setting this `false` only produces a validation warning |
-| `max_duration_minutes` | **No.** Recorded and displayed; nothing stops an overrun |
+| `max_duration_minutes` | **Yes**, by `ac brief run` — once the ceiling has passed no further operation is started and the brief fails. A running operation is not interrupted. `0` = no ceiling |
 | `allow_diagnostic_commands` | No. An instruction to the agent |
 | `allow_unlisted_operations` | No. An instruction to the agent |
 
-> `postcheck:` is parsed and returned by `ac brief show --json`, but **nothing
-> executes it**. Put verification in a final operation or in `success_criteria`.
+> `postcheck:` takes the same keys as `preflight:` and runs after every operation
+> has succeeded; a failing postcheck fails the brief. `brief.window` is free text
+> for the reader and the trail: nothing parses or enforces it.
 
 ---
 

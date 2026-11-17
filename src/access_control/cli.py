@@ -845,7 +845,20 @@ def brief_run(
     # -- operations --------------------------------------------------------
     results: list[dict[str, Any]] = []
     failed = False
+    # The ceiling stops anything new from starting late. An operation already
+    # running is bounded by its own step timeouts, not by this.
+    ceiling_s = brief.rules.max_duration_minutes * 60
+    started = time.monotonic()
     for index, step in enumerate(brief.operations, 1):
+        if ceiling_s > 0 and time.monotonic() - started > ceiling_s:
+            not_started = ", ".join(s.operation for s in brief.operations[index - 1:])
+            _raw(
+                f"brief '{brief.id}' passed its max_duration_minutes "
+                f"({brief.rules.max_duration_minutes}). Not started: {not_started}.",
+                "red",
+            )
+            failed = True
+            break
         console.print(f"\n[bold cyan]({index}/{len(brief.operations)}) {step.operation}[/bold cyan]")
         try:
             result = client.call(

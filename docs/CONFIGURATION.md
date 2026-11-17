@@ -385,7 +385,7 @@ rollback:   [...]
 success_criteria: [...]
 must_not:   [...]
 rules:      {...}
-postcheck:  {...}             # parsed, but NOT executed — see note below
+postcheck:  {...}             # same keys as preflight; runs after the operations succeed
 ```
 
 ### 5.1 `preflight:`
@@ -424,16 +424,19 @@ A bare string is accepted as shorthand for `{operation: <string>}`.
 | `confirm_destructive` | `true` | Advisory. Setting it `false` produces a validation warning; gating itself comes from the catalogue and `--confirm` |
 | `stop_on_first_failure` | `true` | Yes, by `ac brief run` (each step's own `on_failure` decides first) |
 | `reboot_allowed` | `false` | **Yes** — a brief listing an operation whose steps could restart the host is rejected at validation time |
-| `max_duration_minutes` | `120` | **Not enforced.** Recorded and rendered for the reader only |
+| `max_duration_minutes` | `120` | Enforced by `ac brief run`: once this much time has passed, no further operation is started and the brief fails (exit 2). An operation already running is not interrupted. `0` = no ceiling |
 | `allow_diagnostic_commands` | `true` | Advisory to the agent |
 | `allow_unlisted_operations` | `false` | Advisory to the agent |
 
 A **misspelled rule is rejected**, not ignored — a silently-dropped
 `reboots_allowed: true` would be the worst possible outcome.
 
-> **`postcheck:` is parsed and returned by `ac brief show --json`, but nothing
-> executes it.** Put verification in a final operation or in `success_criteria`
-> until that is implemented. Tracked in [gap-analysis.md](gap-analysis.md).
+> **`postcheck:`** takes the same keys as `preflight:` and runs after every
+> operation has succeeded. A failing postcheck fails the brief (exit 2). It is
+> skipped when the brief already failed.
+>
+> **`brief.window`** is free text for the reader and the audit trail. Nothing
+> parses or enforces it.
 
 ---
 

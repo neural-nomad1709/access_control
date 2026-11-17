@@ -114,7 +114,7 @@ Tracked for triage in [../BugFixNchange.md](../BugFixNchange.md).
 | F-08 | `postcheck:` in a brief is parsed but never executed | **Resolved 2026-08-31**: runs via the same daemon handler as `preflight` after the operations succeed; failure fails the brief. Regression tests in `test_cli_brief_postcheck.py` | — |
 | F-09 | "Not reached" in an operation report is dead code | **Resolved 2026-11-16**: compared against the run's planned steps. Tests in `test_engine.py` | — |
 | F-10 | `ac shell` and `ac rdp` use the node's own `host`/`port` rather than the resolved route leg | **Resolved 2026-11-16**: both tunnel to the leg's declared endpoint (`interactive:` for RDP). Tests in `test_cli_interactive_leg.py` | — |
-| F-11 | `rules.max_duration_minutes` and `brief.window` are not enforced | Recorded and rendered only | Low (documented) |
+| F-11 | `rules.max_duration_minutes` and `brief.window` are not enforced | **Resolved 2026-11-16**: `max_duration_minutes` is enforced by `ac brief run`; `window` is documented as free text. Tests in `test_cli_brief_duration.py` | — |
 | F-12 | `PREFLIGHT` and `COMMAND` actions are not in `audit.ACTIONS` | **Resolved 2026-11-16**: both added; `test_audit_actions.py` guards the list against the source | — |
 | F-13 | `check_no_active_install` filters on `$_.SessionId -ne $null`, which is always true | **Resolved 2026-11-16**: filter removed, behaviour unchanged. Tests in `test_brief.py` | — |
 

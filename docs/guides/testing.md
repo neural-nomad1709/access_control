@@ -29,7 +29,9 @@ against a mock.
 | `test_cli_brief_postcheck.py` | 4 | A brief's `postcheck:` block actually runs |
 | `test_campaign.py` | 11 | Campaign parsing, offline planning and retargeting, concurrent dispatch with a fake client, skip-on-no-session, per-target isolation |
 | `test_cli_tunnel.py` | 4 | `ac tunnel --port` reaches the transport, attached and ephemeral |
-| `test_cli_interactive_leg.py` | 6 | `ac shell` / `ac rdp` dial the route leg's address; `ac rdp` records `RDP_LAUNCH` |
+| `test_cli_interactive_leg.py` | 11 | `ac shell` / `ac rdp` dial the route leg's address and use a pre-established forward as it is; `ac rdp` records `RDP_LAUNCH` |
+| `test_cli_brief_duration.py` | 4 | `rules.max_duration_minutes` stops a brief from starting further operations |
+| `test_logging_setup.py` | 9 | `logging.level` sets `transport.log` verbosity; `transport.log` and `errors.log` roll over by size |
 | `test_cli_output_encoding.py` | 2 | Remote output cannot abort the CLI on a cp1252 console |
 | `test_mcp_server.py` | 18 | `ac mcp`: the tool surface is a 1:1 wrapper, operator-only methods absent, `confirmed` stripped |
 | `test_agent_permission_policy.py` | 4 | `.claude/settings.json` matches the agent permission policy in CLAUDE_PRODUCTION_GUARDRAILS.md §8.2 |
@@ -38,7 +40,7 @@ against a mock.
 | `test_operator_shell_approve.py` | 7 | The `:approve` verb at the operator prompt |
 | `test_packaging_independence.py` | 9 | The standalone install names no AgentLighthouse package and no source outside the repo |
 | `test_e2e.py` | 18 | Two full cycles, the agent path, chain failure modes, hop fallback, forwarding detection, probe reporting — over real SSH |
-| **Total (standalone)** | **466** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
+| **Total (standalone)** | **484** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
 
 Counts move as tests are added; `uv run pytest` is the authority. On a machine
 that has had the integrated install, run `uv sync --extra dev` first, or the
@@ -270,6 +272,5 @@ coverage:
 | No coverage threshold enforced | `--cov` is available but nothing fails on a drop |
 | No linter or type checker configured | No ruff/mypy config, despite the code being fully annotated |
 | No RDP path test | `transport/interactive.py` is Windows-only and launches a GUI |
-| `postcheck:` in a brief | Parsed but never executed, so there is nothing to test |
 
 These are tracked in [../gap-analysis.md](../gap-analysis.md).

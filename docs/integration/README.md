@@ -130,7 +130,7 @@ integrated one:
 | `test_mcp_acceptance.py` | 6 | The mediated agent path: descriptors pinned, per-identity policy, results scanned, a signed receipt per hop |
 | `test_posture_attestation.py` | 4 | A posture attestation built from ac's receipts verifies with `al-verify`; tampering is detected |
 
-Standalone: **466 passed, 3 skipped**. Integrated: **504 passed**. CI runs both
+Standalone: **484 passed, 3 skipped**. Integrated: **522 passed**. CI runs both
 modes on Ubuntu and Windows (`.github/workflows/ci.yml`).
 
 ---

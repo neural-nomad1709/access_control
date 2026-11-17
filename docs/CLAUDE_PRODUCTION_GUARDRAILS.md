@@ -343,7 +343,7 @@ still permits ad-hoc commands, gated by the deny-list. **[BUILT]**
 | Element | Mechanism |
 |---|---|
 | Change reference | `brief.change_ref`, recorded in the trail and every report **[BUILT]** |
-| Window | `brief.window` — advisory text, **not enforced** **[GAP]** |
+| Window | `brief.window` — free text for the record, not enforced. `rules.max_duration_minutes` is the enforced bound **[BUILT]** |
 | Requested by | `brief.requested_by` **[BUILT]** |
 | Pre-approval evidence | `ac brief show` output attached to the ticket **[CONFIG]** |
 | Execution evidence | `summary_file` + `ac timeline <session>` attached to the ticket **[BUILT]** |
@@ -650,7 +650,7 @@ rules:
   confirm_destructive: true
   stop_on_first_failure: true
   reboot_allowed: false            # ENFORCED at validation time
-  max_duration_minutes: 45         # advisory
+  max_duration_minutes: 45         # enforced: nothing new starts after this
   allow_diagnostic_commands: true
   allow_unlisted_operations: false
 
@@ -760,7 +760,7 @@ rough priority order. Each is tracked in
 | 4 | No SSO, no RBAC, no separation of duties | Attribution depends on process | `AC_AGENT_ID`; per-environment inventories; repo permissions |
 | 5 | Audit trail is not tamper-evident | Not chain-of-custody evidence | Ship JSONL to write-once storage as it is produced |
 | 6 | ~~No absolute session lifetime~~ **Closed 2026-09-01** | `ac connect --max-lifetime <secs>` | — |
-| 7 | `max_duration_minutes` and `window` are not enforced | A brief can overrun its stated bounds | Operator watching; alert on long sessions |
+| 7 | `window` is free text and not enforced (`max_duration_minutes` is, since 2026-11-16) | A brief can be run outside its stated window | Operator discipline; `--max-lifetime` on the session |
 | 8 | Prompt/response content is not recorded by the tool | Cannot reconstruct *why* the agent acted | Model-platform logging joined via `AC_AGENT_ID` |
 | 9 | No change-management integration | `change_ref` is an unvalidated string | Manual attachment of the evidence pack |
 | 10 | ~~`transport.log` / `errors.log` grow unbounded~~ **Closed 2026-11-16** | Both roll over at 5 MiB | — |
