@@ -14,6 +14,10 @@ from the code audit of 2026-08-17, `C-nn` changes, `D-nn` documentation debt.
 |---|---|---|
 | Agent approvals | `ac mcp` declares every run as an agent's, so gated work arriving over MCP is held for `:approve` even on a session opened without `--agent-id` | F-01r (part) |
 | CLI | A reader that stops early (`ac ops \| Select-Object -First 3`) no longer leaves a traceback in `errors.log` | B-19 |
+| Connectivity | `via:` is the only declaration style. A top-level `routes:` block (even empty) or a `path:` on any node is refused at load time with a conversion message. `allow_direct` is gone: a direct connection is `via: {from: local, …}`. `ac routes --json` no longer has a `declared_via` key | C-14, B-21, D-03 |
+| Connectivity | An explicit `preestablished: false` (or `tunnel_preestablished: false`) on a loopback address is honoured, so a service on a bastion's own `localhost` is reached through the bastion | B-20, B-22 |
+| Errors | The "no route" error shows a `via:` example; the `ac rdp` / `ac tunnel` pre-established errors say to set `preestablished: false` | C-14 |
+| Docs | The operations guide was checked against the code and corrected; PowerShell's built-in `ac` alias is documented; the example inventory shows a three-hop route | — |
 
 ### v0.2.1 (2026-11-16)
 
@@ -72,6 +76,9 @@ The last commit before the integration work is tagged
 | B-17 | Every `uv run ac …` and `uv sync` failed with `Package metadata name 'agentlighthouse-governance' does not match given name 'al-governance'`, although the standalone tool uses no AgentLighthouse code | AgentLighthouse 0.4.0 renamed its packages. `pyproject.toml` took them from a sibling checkout, and uv validates every declared source on each run, including ones it is not installing | The packages use their new names and come from one pinned release tag (`[tool.uv.sources]`, git + `tag`); `agentlighthouse-governance` moved to the opt-in `lighthouse-test` group; CI runs both modes | `test_packaging_independence.py` |
 | B-18 | `ac rdp` / `ac shell` against a node whose address is a pre-established forward built a second tunnel to `localhost` from the bastion, which is the bastion itself | Both commands tunnelled to whatever address they were given | The client is pointed straight at the forward: no tunnel, no hop authentication. `ac rdp` still records `RDP_LAUNCH`, and is refused when only another protocol was forwarded | `test_cli_interactive_leg.py` |
 | B-19 | Piping `ac` into a reader that stops early (`ac ops \| Select-Object -First 3`) logged an `OSError: [Errno 22]` traceback to `errors.log` and exited as a crash | Windows reports a write to a closed pipe as `OSError` errno 22 (POSIX: `BrokenPipeError`), and `main` treated it as an unexpected failure | `sys.stdout` is wrapped so a failed write surfaces as `BrokenPipeError` on both platforms; `main` then points stdout at devnull and exits 1 without a message. An errno 22 from anywhere else is still recorded | `test_cli_closed_pipe.py` (runs the real CLI in a subprocess) |
+| B-20 | A `via:` or `routes:` leg to a service on the bastion's own `localhost` was dialled from the operator's machine instead of forwarded by the bastion, silently reaching the wrong machine. Only `path:` could express it | `Endpoint.parse` forced every loopback address to `preestablished`, even over an explicit `preestablished: false` | The loopback guess applies only when neither key is given | `test_routegraph.py::test_an_explicit_false_overrides_the_loopback_guess`; `test_e2e.py::TestLoopbackOnTheBastion` (asserts the bastion carried the forward) |
+| B-21 | A `path:` written beside `via:` or `routes:` was silently ignored | The loader took `via:`/`routes:` first and never looked at `path:` | `path:` and `routes:` are refused outright (C-14) | `test_config.py::test_path_alongside_via_is_refused_rather_than_ignored` |
+| B-22 | `tunnel_preestablished: false` was ignored in the inline `via: {hostname, port, protocol}` form, though honoured in nested `automation:`/`interactive:` blocks | The inline shorthand forwarded only the `preestablished` spelling | Both spellings are forwarded | `test_routegraph.py::test_the_inline_shorthand_carries_either_spelling` |
 
 ### 2.2 Audit findings closed
 
@@ -93,6 +100,7 @@ the documentation.
 | F-11 | `rules.max_duration_minutes` and `brief.window` were not enforced | 2026-11-16 | `ac brief run` starts no operation after the ceiling. `window` is free text and documented as such | `test_cli_brief_duration.py` |
 | F-12 | `PREFLIGHT` and `COMMAND` were emitted but absent from `audit.ACTIONS` | 2026-11-16 | Added; a test scans the source for emitted names | `test_audit_actions.py` |
 | F-13 | `check_no_active_install` had an always-true filter | 2026-11-16 | Removed; behaviour unchanged | `test_brief.py` |
+| F-15 | `RouteGraph.direct_allowed` was accepted by `build()` and never populated | 2026-11-17 | Removed with `allow_direct` (C-14) | — |
 | F-19 | `context._next_sequence(width=…)` accepted and discarded an argument | 2026-08-31 | The function was removed with B-16 | — |
 | F-20 | No CI pipeline | 2026-08-31 | `.github/workflows/ci.yml`: both modes, Ubuntu and Windows | — |
 | F-23 | No git history | 2026-08-31 | The repository is under git with a remote | — |
@@ -102,7 +110,7 @@ the documentation.
 
 | # | Change | Why |
 |---|---|---|
-| C-01 | Per-node `via:` became the canonical connectivity declaration | A separate `routes:` list described each machine twice, and the two drifted. `routes:` and `path:` still compile to the same graph; combining them with `via:` is refused |
+| C-01 | Per-node `via:` became the canonical connectivity declaration | A separate `routes:` list described each machine twice, and the two drifted. Superseded by C-14 |
 | C-02 | The `ac connect` window became a prompt (`operator_shell.py`) | The window was authenticated and idle, so an operator who wanted to *look* at the machine opened a second connection and retyped every password |
 | C-03 | Hop fallback: hold the session at the last authenticated hop when the target leg fails | Throwing away typed passwords because the last leg refused is the wrong answer. Operations and `ac exec` are withdrawn while degraded, and `:retry` costs no password |
 | C-04 | Campaigns (`ac campaign`) | One reviewed brief across many hosts' live sessions. Instructions stay central; the target never supplies work |
@@ -115,6 +123,7 @@ the documentation.
 | C-11 | Six core documents plus `docs/{guides,implementation}` | The audit of 2026-08-17 found the documentation flat, partial and in places wrong |
 | C-12 | `ac connect --agent-id` | Explicit naming was env-var-only, which is the wrong default when several agents each need their own identity |
 | C-13 | Documentation split into the standalone product and `docs/integration/`; the three trackers merged into this file | One place to look for what is open; no instructions that mix the two install modes |
+| C-14 | `via:` is the only connectivity declaration; `routes:` and `path:` are refused with a conversion message (CONFIGURATION.md §3.7). The path-shorthand compiler, `Host.path`, `allow_direct`, `Inventory.routes_declared` and `RouteGraph.direct_allowed` were removed | One spelling means one thing to read and one thing to test; `path:` beside `via:` was silently dead (B-21). A direct connection is declared like any leg. `test_config.py`, `test_routegraph.py` |
 
 ---
 
@@ -131,7 +140,6 @@ the documentation.
 | # | Item |
 |---|---|
 | F-14 | `CredentialStore.discard_after_auth` — never set `True`, including in tests |
-| F-15 | `RouteGraph.direct_allowed` — accepted by `build()`, never populated by `config.py` |
 | F-16 | `EV_HOP_CONNECTED`, `EV_TRANSFER` — declared event constants nothing emits |
 | F-17 | `safety.classify/check(extra_rules=…)` — an extension point with no caller |
 | F-18 | `Route.is_direct`, `Route.nested_chain`, `Route.psrp_entry`, `Inventory.node_context` — unused helpers |
@@ -161,9 +169,21 @@ that is not there.
 |---|---|---|
 | D-01 | A worked nested-winrm example, end to end, once F-26 is verified | It is the flagship topology and the least proven in practice |
 | D-02 | Captured terminal sessions for the first-run flow | A first-time user benefits from seeing the prompt and the panels |
-| D-03 | A migration note if the `routes:` / `path:` declaration styles are ever retired | They are documented as accepted; a deprecation needs a path |
 | D-04 | Per-operation documentation for the shipped catalogue | The operations are documented by their YAML comments only |
 | D-05 | A CONTRIBUTING guide | Implied by `implementation/README.md` conventions, but not stated |
+
+D-03 (a migration note for retiring `routes:` / `path:`) closed on 2026-11-17:
+CONFIGURATION.md §3.7 has the conversion table, and the load-time error says how
+to convert.
+
+### 3.6 Open bugs (code review of 2026-11-17)
+
+| # | Item | Detail | Severity |
+|---|---|---|---|
+| B-23 | The B-19 stdout guard turns every `OSError` from stdout into `BrokenPipeError` | A real write failure (disk full on `ac routes --json > out.json`) exits 1 with no message and a truncated file. Only EPIPE / Windows errno 22 should be translated | Medium |
+| B-24 | `main()` exits silently on a `BrokenPipeError` from any source | A broken pipe that is not stdout's (a local socket write) now leaves no message and no traceback in `errors.log` | Low |
+| B-25 | A reader that stops early exits with status 1 | `ac ops \| Select-Object -First 3` sets `$LASTEXITCODE=1`, so CI or `$PSNativeCommandUseErrorActionPreference` reports a failure. Pick 0 (or 141, as POSIX) deliberately | Low |
+| B-26 | `mcp_server.AGENT_DECLARED_METHODS` is a separate hand-kept set beside `EXPOSED_TOOLS` | A new gated MCP tool missing from it would not be held for `:approve` on a session opened without `--agent-id`. A flag on `ExposedTool` keeps them together | Low |
 
 ---
 

@@ -176,7 +176,9 @@ Design choices with consequences, not defects. Each is stated in
 6. Verify the nested Windows path against real hardware and record the evidence
    (R-03, F-26).
 7. A WinRM test double, so the Windows paths are covered offline (F-25).
-8. Remove or wire up the dead code (F-14 to F-18).
+8. Remove or wire up the remaining dead code (F-14, F-16 to F-18), and fix the
+   open bugs in [BugFixNchange.md §3.6](../BugFixNchange.md#36-open-bugs-code-review-of-2026-11-17),
+   B-23 first: a failed write to stdout (a full disk) is currently silent.
 9. Optional **output filtering / classification** for regulated estates (R-06).
 
 ### Longer term (if the scope grows)
