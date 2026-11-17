@@ -1,11 +1,15 @@
 # ---------------------------------------------------------------------------
 # Inventory: nodes, explicit connectivity, logging and agent identity.
 #
-# THIS FILE CONTAINS NO SECRETS and is meant to be committed and shared. Every
-# password is prompted for at connect time and is never written anywhere.
+# THIS FILE CONTAINS NO SECRETS. Every password is prompted for at connect time
+# and is never written anywhere.
 #
 # Copy to `inventory.yaml` and edit for your environment:
 #     copy config\inventory.example.yaml config\inventory.yaml
+#
+# Only this example, with placeholder values, is committed. Your copy names
+# real hostnames, addresses and logins, so `config/inventory.yaml` is
+# gitignored -- keep it that way.
 #
 # The central rule: CONNECTIVITY IS DECLARED, NEVER DISCOVERED. A machine with
 # no `via:` cannot be traversed, and no direct connection is attempted instead.
@@ -129,6 +133,46 @@ hops:
     #   automation:  {hostname: localhost, port: 45985, protocol: winrm, preestablished: true}
     #   interactive: {hostname: localhost, port: 44001, protocol: rdp,   preestablished: true}
 
+  # --- A three-hop route: bastion1 -> bastion2 -> jump2 -> win-app02 ---------
+  # Any number of SSH bastions may come first, each tunnelled through the one
+  # before it. After them, at most ONE Windows jump server. A Linux target can
+  # only sit behind SSH hops, never behind a Windows jump.
+  bastion2:
+    role: bastion
+    kind: ssh
+    username: opuser
+    description: QA inner SSH bastion
+    context:
+      environment: QA
+      datacenter: East
+      network_zone: Restricted
+      owner: PlatformOps
+    auth:
+      method: password
+    via:
+      from: bastion1
+      hostname: bastion2.corp.net      # address as seen FROM bastion1
+      port: 22
+      protocol: ssh
+
+  jump2:
+    role: jump
+    kind: windows
+    username: jmpuser
+    domain: corp
+    description: QA restricted-zone jump server
+    context:
+      environment: QA
+      datacenter: East
+      network_zone: Restricted
+      owner: PlatformOps
+    auth:
+      transport: ntlm
+    via:
+      from: bastion2
+      automation:  {hostname: 192.0.2.21, port: 5985, protocol: winrm}   # as seen FROM bastion2
+      interactive: {hostname: 192.0.2.21, port: 3389, protocol: rdp}
+
 hosts:
   linux-app01:
     role: target
@@ -172,6 +216,26 @@ hosts:
         port: 3389
         protocol: rdp
 
+  # The far end of the three-hop route declared under hops:.
+  win-app02:
+    role: target
+    kind: windows
+    username: svc_deploy
+    domain: corp
+    description: Windows server in the restricted zone
+    tags: [windows, qa]
+    context:
+      environment: QA
+      datacenter: East
+      network_zone: Restricted
+      owner: AppOps
+    auth:
+      transport: ntlm
+    via:
+      from: jump2
+      automation:  {hostname: win-app02.corp.net, port: 5985, protocol: winrm}   # as seen FROM jump2
+      interactive: {hostname: win-app02.corp.net, port: 3389, protocol: rdp}
+
 # ---------------------------------------------------------------------------
 # OLDER SPELLINGS -- still accepted, no longer the recommended shape
 #
@@ -179,7 +243,6 @@ hosts:
 # edges, and a per-host `path: [bastion1, jump1]` shorthand that uses each
 # node's own `hostname`/`port`, both still load and compile to the same graph.
 #
-# They cannot be combined with `via:` in one file -- connectivity declared in
-# two places is refused at load time, which is the mistake `via:` exists to
-# make impossible.
+# Don't mix them with `via:` in one file. A `routes:` block alongside `via:`
+# is refused at load time. A `path:` alongside `via:` is silently ignored.
 # ---------------------------------------------------------------------------
