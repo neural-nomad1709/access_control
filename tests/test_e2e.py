@@ -512,6 +512,79 @@ class TestAgentPath:
             server.shutdown("closed")
             thread.join(timeout=5)
 
+    def test_gated_work_over_mcp_waits_for_the_operators_approve(
+        self, environment, tmp_path: Path
+    ) -> None:
+        """A session opened from a plain terminal, with no --agent-id: the MCP
+        door still holds the agent's gated run until the operator types
+        :approve, and only the next run goes through."""
+        import re
+
+        from rich.console import Console
+
+        from access_control.gatekeeper import LocalGatekeeper
+        from access_control.mcp_server import McpServer
+        from access_control.operator_shell import OperatorShell
+
+        config, _bastion, _target, state = environment
+        prompter = ScriptedPrompter(
+            {"Test bastion": BASTION_PASSWORD, "Test application server": TARGET_PASSWORD}
+        )
+        session = make_session(config, prompter, tmp_path)
+        session.gatekeeper = LocalGatekeeper()
+        session.connect()
+        assert session.agent_attached is False
+
+        server = SessionServer(session)
+        ready = threading.Event()
+        holder: dict[str, SessionDescriptor] = {}
+
+        def on_ready(descriptor: SessionDescriptor) -> None:
+            holder["d"] = descriptor
+            ready.set()
+
+        server.on_ready = on_ready
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        assert ready.wait(timeout=10)
+
+        def mcp_install(package: str) -> dict:
+            return mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+                "name": "ac_run_operation",
+                "arguments": {"operation_id": "install-app", "params": {"package": package},
+                              "confirmed": True},
+            }})["result"]
+
+        try:
+            mcp = McpServer(SessionClient(holder["d"], timeout=30))
+
+            held = mcp_install("nginx")
+            assert held["isError"] is True
+            request_id = re.search(r"apr-[0-9a-f]{6}", held["content"][0]["text"]).group(0)
+            assert state.installed == []
+
+            out, err = io.StringIO(), io.StringIO()
+            OperatorShell(session, Console(file=out, width=200), Console(file=err, width=200)
+                          )._meta(f"approve {request_id}")
+            assert err.getvalue() == ""
+
+            ran = mcp_install("nginx")
+            assert ran["isError"] is False, ran["content"][0]["text"]
+            assert state.installed == ["nginx"]
+
+            # One approval, one run.
+            assert mcp_install("nginx")["isError"] is True
+            assert state.installed == ["nginx"]
+
+            # A human's --confirm from a plain terminal is unaffected.
+            human = SessionClient(holder["d"], timeout=30)
+            human.call("run_operation", operation_id="install-app",
+                       params={"package": "curl"}, confirmed=True)
+            assert state.installed == ["nginx", "curl"]
+        finally:
+            server.shutdown("closed")
+            thread.join(timeout=5)
+
 
 # --------------------------------------------------------------------------
 # Failure modes of the chain itself
