@@ -13,8 +13,11 @@ Hosts and hops live in `config/inventory.yaml`. Copy the example first:
 copy config\inventory.example.yaml config\inventory.yaml
 ```
 
-**No secrets go in this file.** It is meant to be committed and shared across the
-company. Passwords are prompted for at connect time.
+**No secrets go in this file.** Passwords are prompted for at connect time.
+
+It is still not committed: `config/inventory.yaml` is gitignored because it names
+real hostnames, addresses and logins. The shareable version is
+`config/inventory.example.yaml`, with placeholder values.
 
 ### A node
 
@@ -162,8 +165,10 @@ A standalone `routes:` list of `{source, target, hostname, port, protocol}`
 edges, and a per-host `path: [bastion1]` shorthand that uses each node's own
 hostname and port, both still load and compile to the same graph.
 
-They cannot be combined with `via:` in one file: connectivity declared in two
-places is refused at load time.
+Don't mix them with `via:` in one file. A `routes:` block alongside `via:` is
+refused at load time ("connectivity is declared twice"). A `path:` alongside
+`via:` or `routes:` is **not** refused: it is silently ignored, and the route
+comes from `via:` / `routes:` alone.
 
 ### Then confirm it
 
@@ -307,8 +312,8 @@ on_failure:
   which is how you find an installer log with a generated name.
 - **`eventlog`** becomes `Get-WinEvent` on Windows and `journalctl`/syslog
   elsewhere.
-- **`hints`** are keyed by exit code, with `"*"` as a catch-all. Quote numeric
-  keys — YAML would otherwise make them integers.
+- **`hints`** are keyed by exit code, with `"*"` as a catch-all. Keys are compared
+  as strings, so `1603:` and `"1603":` both work; `"*"` must be quoted.
 
 Write hints for the person (or agent) who has to act at 2am. "Generic MSI
 failure" alone is useless; "search the log for Return value 3" is not.
@@ -335,7 +340,7 @@ A step marked `destructive` makes the whole operation gated.
 
 On top of that, `safety.py` classifies every rendered command independently. An
 operation cannot opt out of the block-list — see
-[design.md](../SECURITY.md#41-the-command-deny-list).
+[SECURITY.md](../SECURITY.md#41-the-command-deny-list).
 
 ---
 
@@ -358,6 +363,11 @@ uv run ac run target1 install-package -p package=agent.msi --confirm --start-at 
 `--start-at` matters. Re-running a whole operation from the top after a
 mid-operation failure repeats work that already succeeded, and for a destructive
 step that is sometimes actively harmful.
+
+`ac run` attaches to the live session for that host, opened with `ac connect`
+in your own terminal. From a new window, `ac.exe status` lists the live
+sessions; pass the **host id** from that list, not the `SES-…` id. Every
+command and option is in [cli-reference.md](../implementation/cli-reference.md).
 
 ---
 

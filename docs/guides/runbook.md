@@ -558,7 +558,20 @@ retry. Other things to check:
   for. A server with `AuthenticationMethods publickey,password` needs
   `method: key+password`; `password` alone will fail after the key stage.
 - **Is it the right key?** `ac doctor` verifies each `key_file` exists and is
-  readable OpenSSH format.
+  readable OpenSSH format. To see whether the bastion actually accepts the key,
+  test it with plain OpenSSH, outside `ac`:
+
+  ```powershell
+  ! ssh -v -i $env:USERPROFILE\.ssh\id_rsa_operator -p 2222 -o PreferredAuthentications=publickey operator@bastion1.example.net
+  ```
+
+  This offers the key and nothing else, so on a `key+password` bastion it always
+  ends in `Permission denied`. Read the lines before that:
+  - `Server accepts key`, then a line containing `partial success`: the key is
+    enrolled and fine. The bastion wants the password next; look elsewhere.
+  - `Authentications that can continue: publickey` repeating, with no
+    `partial success`: the key was refused. The bastion's owner has to
+    re-enrol it.
 - **Is an OTP being asked for?** A keyboard-interactive challenge is shown to you
   verbatim. If you see the server's own prompt text, answer that, not your
   password.

@@ -289,7 +289,9 @@ Exits `2` on failure (and with `--json` emits `{"ok": false, "error": …}`).
 
 Executes a brief against a live session for its host: preflight, then each
 operation in order honouring `on_failure` (`stop` / `continue` / `rollback`),
-then the success-criteria checklist.
+then the brief's `postcheck:` (skipped if an operation already failed), then the
+success-criteria checklist. A failing postcheck fails the brief: the change ran
+but did not verify.
 
 | Flag | Effect |
 |---|---|
