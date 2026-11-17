@@ -134,6 +134,7 @@ means adding `do_<name>` to `SessionServer` — the dispatcher finds it.
 | `open_tunnel` | `dest_host`, `dest_port`, `purpose`, `local_port` | `{tunnel_id, local_host, local_port, dest}` | `ac rdp`, `ac shell`, `ac tunnel` |
 | `close_tunnel` | `tunnel_id` | `{closed}` | same |
 | `credentials_for` | `node_id` | `{node_id, username}` | `ac rdp` (pre-fills the username) |
+| `rdp_launched` | `node_id`, `endpoint`, `username`, `staged` | `{recorded}` | `ac rdp` (records `RDP_LAUNCH` in this session's trail) |
 | `close` | `status` | The final status, with `closing: true` | `ac disconnect` |
 
 **`credentials_for` returns a username only. Passwords never cross this socket.**
@@ -146,7 +147,7 @@ subset of these methods as MCP tools, for running behind AgentLighthouse's
 proxy — see [../integration/mcp-proxy-config.md](../integration/mcp-proxy-config.md).
 It is a 1:1 wrapper: `ac_status`, `ac_preflight`, `ac_operations`, `ac_preview`,
 `ac_run_operation`, `ac_run_command`, `ac_fetch_log`. Tunnels,
-`credentials_for`, `close` and `reload` are **not** exposed — interactive
+`credentials_for`, `rdp_launched`, `close` and `reload` are **not** exposed — interactive
 handoff and session lifecycle stay with the human operator — and `confirmed` is
 stripped from every call, so an agent cannot self-approve through this surface.
 

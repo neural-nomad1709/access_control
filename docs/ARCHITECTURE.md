@@ -461,7 +461,7 @@ read %LOCALAPPDATA%/access_control/
 
 Methods: `ping`, `status`, `preflight`, `operations`, `reload`, `preview`,
 `run_operation`, `run_command`, `fetch_log`, `upload`, `download`, `open_tunnel`,
-`close_tunnel`, `credentials_for`, `close`. Full reference:
+`close_tunnel`, `credentials_for`, `rdp_launched`, `close`. Full reference:
 [implementation/session-protocol.md](implementation/session-protocol.md).
 
 Two deliberate behaviours: `credentials_for` returns a **username only** —

@@ -194,6 +194,26 @@ class TestPreflightAuditPhase:
         assert self._preflight_record(session)["phase"] == "postcheck"
 
 
+class TestRdpLaunchAudit:
+    """F-03: an RDP launch through a live session lands in that session's trail."""
+
+    def test_rdp_launched_records_the_canonical_action(self) -> None:
+        session = ServableSession()
+        session.audit = RecordingAudit()
+        with RunningServer(session) as (client, _):
+            client.call(
+                "rdp_launched", node_id="win01", endpoint="127.0.0.1:55000",
+                username="CORP\\op", staged=True,
+            )
+        records = [f for a, f in session.audit.records if a == "RDP_LAUNCH"]
+        assert len(records) == 1
+        record = records[0]
+        assert record["target"] == "win01"
+        assert record["endpoint"] == "127.0.0.1:55000"
+        assert record["username"] == "CORP\\op"
+        assert record["credential_staged"] is True
+
+
 class TestProtocol:
     def test_ping_and_status(self) -> None:
         with RunningServer(ServableSession()) as (client, _):

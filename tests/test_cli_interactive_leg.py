@@ -62,13 +62,36 @@ def config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return directory
 
 
+class FakeRdpSession:
+    def wait(self) -> None:
+        return None
+
+    def cleanup(self) -> list[str]:
+        return []
+
+
+class RecordingAudit:
+    def __init__(self) -> None:
+        self.records: list[tuple[str, dict[str, Any]]] = []
+
+    def action(self, action: str, **fields: Any) -> None:
+        self.records.append((action, fields))
+
+
+class AuditedEphemeral(RecordingEphemeral):
+    """An ephemeral session with an audit trail, as the real one has."""
+
+    def __enter__(self) -> Any:
+        session = super().__enter__()
+        session.audit = RecordingAudit()
+        return session
+
+
 @pytest.fixture(autouse=True)
-def no_clients(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, ...]]:
-    """Record the interactive launches instead of starting ssh or mstsc."""
-    launches: list[tuple[Any, ...]] = []
-    monkeypatch.setattr(cli, "launch_ssh_shell", lambda *a, **k: launches.append(a))
-    monkeypatch.setattr(cli, "_run_rdp", lambda *a, **k: launches.append(a))
-    return launches
+def no_clients(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stop at the process boundary: no ssh or mstsc is started."""
+    monkeypatch.setattr(cli, "launch_ssh_shell", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "launch_rdp", lambda *a, **k: FakeRdpSession())
 
 
 def _tunnel_dest(client: RecordingClient) -> tuple[str, int]:
@@ -109,10 +132,43 @@ class TestRdpUsesTheInteractiveLeg:
 
     def test_ephemeral(self, config_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(cli, "attach", lambda node: None)
-        monkeypatch.setattr(cli, "EphemeralSession", RecordingEphemeral)
+        monkeypatch.setattr(cli, "EphemeralSession", AuditedEphemeral)
 
         result = CliRunner().invoke(cli.app, ["rdp", "win-app01"])
 
         assert result.exit_code == 0, result.output
         kwargs = RecordingEphemeral.last_session.open_tunnel_kwargs
         assert (kwargs["dest_host"], kwargs["dest_port"]) == ("10.0.0.202", 3390)
+
+
+class TestRdpLaunchIsAudited:
+    """F-03: the interactive session itself is recorded, not only its tunnel."""
+
+    def test_attached(self, config_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        client = RecordingClient()
+        monkeypatch.setattr(cli, "attach", lambda node: client)
+
+        result = CliRunner().invoke(cli.app, ["rdp", "win-app01"])
+
+        assert result.exit_code == 0, result.output
+        launched = [kw for m, kw in client.calls if m == "rdp_launched"]
+        assert launched == [{
+            "node_id": "win-app01",
+            "endpoint": "127.0.0.1:55000",
+            "username": "winuser",
+            "staged": False,
+        }]
+
+    def test_ephemeral(self, config_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(cli, "attach", lambda node: None)
+        monkeypatch.setattr(cli, "EphemeralSession", AuditedEphemeral)
+
+        result = CliRunner().invoke(cli.app, ["rdp", "win-app01"])
+
+        assert result.exit_code == 0, result.output
+        audit = AuditedEphemeral.last_session.audit
+        records = [f for a, f in audit.records if a == "RDP_LAUNCH"]
+        assert len(records) == 1
+        assert records[0]["target"] == "win-app01"
+        assert records[0]["endpoint"] == "127.0.0.1:55000"
+        assert records[0]["credential_staged"] is False

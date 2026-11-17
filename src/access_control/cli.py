@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import typer
 from rich.console import Console
@@ -23,7 +23,7 @@ from rich.table import Table
 from rich.text import Text
 
 from . import __version__
-from .audit import list_sessions, load_session
+from .audit import list_sessions, load_session, record_rdp_launch
 from .brief import load_brief, validate_brief
 from .campaign import load_campaign, plan_campaign, run_campaign
 from .config import load_all, load_inventory, load_operations
@@ -1303,6 +1303,9 @@ def rdp(
             username or target.user,
             stage_credentials,
             full_screen,
+            record=lambda endpoint, user, staged: client.call(
+                "rdp_launched", node_id=node, endpoint=endpoint, username=user, staged=staged
+            ),
         )
         client.call("close_tunnel", tunnel_id=tunnel["tunnel_id"])
         return
@@ -1312,7 +1315,16 @@ def rdp(
     console.print(f"route: {route.describe()}")
     with EphemeralSession(node, inventory=inventory) as session:
         tunnel = session.open_tunnel(dest_host, dest_port, purpose=f"rdp:{node}")
-        _run_rdp(tunnel.endpoint, node, target.user, stage_credentials, full_screen)
+        _run_rdp(
+            tunnel.endpoint,
+            node,
+            target.user,
+            stage_credentials,
+            full_screen,
+            record=lambda endpoint, user, staged: record_rdp_launch(
+                session.audit, node, endpoint, user, staged
+            ) if session.audit else None,
+        )
 
 
 def _interactive_destination(
@@ -1335,7 +1347,13 @@ def _interactive_destination(
 
 
 def _run_rdp(
-    endpoint: str, node: str, username: str | None, stage: bool, full_screen: bool
+    endpoint: str,
+    node: str,
+    username: str | None,
+    stage: bool,
+    full_screen: bool,
+    *,
+    record: Callable[[str, str | None, bool], Any],
 ) -> None:
     password = None
     if stage:
@@ -1352,6 +1370,8 @@ def _run_rdp(
         full_screen=full_screen,
     )
     try:
+        # Inside the try: a failed record must still clean up staged credentials.
+        record(endpoint, username, stage)
         console.print("[dim]Waiting for the RDP window to close ...[/dim]")
         session.wait()
     except KeyboardInterrupt:

@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .audit import AuditLog
+from .audit import AuditLog, record_rdp_launch
 from .config import Catalog, Inventory, load_all
 from .context import AgentIdentity
 from .credentials import CredentialStore, select_prompter
@@ -554,6 +554,14 @@ class SessionServer:
         if tunnel is not None:
             tunnel.stop()
         return {"closed": tunnel_id}
+
+    def do_rdp_launched(
+        self, node_id: str, endpoint: str, username: str | None = None, staged: bool = False
+    ) -> dict[str, Any]:
+        """``ac rdp`` reports the mstsc launch so this session's trail records it."""
+        if self.session.audit:
+            record_rdp_launch(self.session.audit, node_id, endpoint, username, bool(staged))
+        return {"recorded": bool(self.session.audit)}
 
     def do_credentials_for(self, node_id: str) -> dict[str, Any]:
         """Username only.  Passwords never cross this socket.

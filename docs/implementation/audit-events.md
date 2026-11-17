@@ -93,6 +93,7 @@ COMMAND_BLOCKED  SESSION_START   SESSION_END     ERROR
 | `winrm.ntlm_provider` | — | same | `hop_id`, `provider` (resolved), `configured` |
 | `tunnel.open` | — | `Session._connect_winrm` | `hop_id` (the anchor), `target`, `local_port`, `purpose` |
 | `tunnel.open` | `TUNNEL_OPEN` | `Session.open_tunnel` | `source`, `target`, `detail`, `local_port`, `purpose` (`rdp:`/`shell:`/`manual:`/`winrm:`) |
+| `rdp.launch` | `RDP_LAUNCH` | `ac rdp`, via `daemon.do_rdp_launched` or its temporary session | `target` (node), `endpoint`, `username`, `credential_staged`, `detail` |
 | `tunnel.preestablished` | — | `Session._connect_winrm` | `hop_id`, `endpoint`, `note` |
 | `probe` | — | `probe._finish` | The entire probe report: `route`, `channel`, `nodes[]` with ports, verdicts and advice, `deep_result`, `blocked_at`, `forwarding_blocked_at`, `duration_s` |
 

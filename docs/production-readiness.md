@@ -184,7 +184,7 @@ Design choices with consequences, not defects. Each is stated in
 6. ~~Close F-07 (`ac tunnel --port` silently ignored) and F-08 (`postcheck:` never
    executed)~~ **Done 2026-08-31** — both fixed test-first (`test_cli_tunnel.py`,
    `test_cli_brief_postcheck.py`).
-7. Emit `RDP_LAUNCH` audit records (F-03).
+7. ~~Emit `RDP_LAUNCH` audit records (F-03).~~ **Done 2026-11-16** (`test_cli_interactive_leg.py`, `test_daemon.py`).
 8. Either apply `logging.level` or remove it (F-05).
 9. Rotate or bound `transport.log` and `errors.log` (F-06).
 10. Remove the stray files from the working tree (F-24).
