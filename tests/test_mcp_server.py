@@ -93,7 +93,8 @@ class TestToolCalls:
             "name": "ac_run_operation",
             "arguments": {"operation_id": "windows-health"},
         }))
-        assert client.calls == [("run_operation", {"operation_id": "windows-health"})]
+        assert client.calls == [("run_operation", {
+            "operation_id": "windows-health", "agent_caller": True})]
         content = reply["result"]["content"]
         assert content[0]["type"] == "text"
         assert json.loads(content[0]["text"])["method"] == "run_operation"
@@ -105,7 +106,31 @@ class TestToolCalls:
             "name": "ac_run_operation",
             "arguments": {"operation_id": "install-package", "confirmed": True},
         }))
-        assert client.calls == [("run_operation", {"operation_id": "install-package"})]
+        assert client.calls == [("run_operation", {
+            "operation_id": "install-package", "agent_caller": True})]
+
+    @pytest.mark.parametrize("tool, method, arguments", [
+        ("ac_run_operation", "run_operation", {"operation_id": "windows-health"}),
+        ("ac_run_command", "run_command", {"command": "hostname"}),
+    ])
+    def test_work_that_runs_on_the_host_is_declared_an_agents(
+        self, server, tool: str, method: str, arguments: dict
+    ) -> None:
+        """This surface is the agent's door, so the daemon must treat every run
+        through it as an agent's, whether or not the session was opened with
+        --agent-id."""
+        srv, client = server
+        srv.handle(rpc("tools/call", {"name": tool, "arguments": arguments}))
+        assert client.calls == [(method, {**arguments, "agent_caller": True})]
+
+    def test_an_agent_cannot_declare_itself_human(self, server) -> None:
+        srv, client = server
+        reply = srv.handle(rpc("tools/call", {
+            "name": "ac_run_command",
+            "arguments": {"command": "hostname", "agent_caller": False},
+        }))
+        assert reply["result"]["isError"] is True
+        assert client.calls == []
 
     def test_a_refusal_comes_back_as_a_tool_error_with_the_message(self) -> None:
         refusal = PermissionRequired("held for out-of-band approval (request hitl_x)")
@@ -224,3 +249,16 @@ class TestSchemaMatchesDaemon:
             schema_params = set(spec.properties) | {"confirmed", "agent_caller"}
             missing = daemon_params - schema_params
             assert not missing, f"{name} omits daemon param(s) {missing}"
+
+    def test_every_exposed_method_that_accepts_agent_caller_gets_it(self) -> None:
+        import inspect
+
+        from access_control import daemon
+        from access_control.mcp_server import AGENT_DECLARED_METHODS
+
+        accepting = {
+            spec.method for spec in EXPOSED_TOOLS.values()
+            if "agent_caller" in inspect.signature(
+                getattr(daemon.SessionServer, f"do_{spec.method}")).parameters
+        }
+        assert accepting == AGENT_DECLARED_METHODS

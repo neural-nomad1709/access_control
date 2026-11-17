@@ -141,7 +141,7 @@ means adding `do_<name>` to `SessionServer` — the dispatcher finds it.
 There is no method that returns a secret.
 
 **`agent_caller`** is sent as `true` by a CLI client that finds itself running
-inside an agent harness. It can only make the session stricter: the request is
+inside an agent harness, and always by `ac mcp`. It can only make the session stricter: the request is
 handled as an agent's, so `confirmed` is ignored and gated work is held for the
 operator's `:approve`. There is no method that resolves an approval; that
 happens only at the `ac connect` prompt.
@@ -156,6 +156,9 @@ It is a 1:1 wrapper: `ac_status`, `ac_preflight`, `ac_operations`, `ac_preview`,
 `credentials_for`, `rdp_launched`, `close` and `reload` are **not** exposed — interactive
 handoff and session lifecycle stay with the human operator — and `confirmed` is
 stripped from every call, so an agent cannot self-approve through this surface.
+`ac_run_operation` and `ac_run_command` always reach the daemon with
+`agent_caller: true`, so their gated work is held for `:approve` even on a
+session opened without `--agent-id`.
 
 Every method that does work calls `session.touch()` first, so activity resets the
 idle timer.

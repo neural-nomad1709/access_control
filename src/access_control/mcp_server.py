@@ -89,6 +89,10 @@ EXPOSED_TOOLS: dict[str, ExposedTool] = {
 }
 
 
+#: Daemon methods that accept ``agent_caller``: the ones that run work on the host.
+AGENT_DECLARED_METHODS = frozenset({"run_operation", "run_command"})
+
+
 def _tool_descriptors() -> list[dict[str, Any]]:
     return [{
         "name": name,
@@ -159,6 +163,11 @@ class McpServer:
         missing = [k for k in tool.required if k not in arguments]
         if missing:
             return _tool_error(f"missing required argument(s) for {name}: {missing}")
+        if tool.method in AGENT_DECLARED_METHODS:
+            # Everything arriving here comes from an agent. Declaring it lets
+            # the daemon hold gated work even when the session was opened
+            # without --agent-id.
+            arguments["agent_caller"] = True
         try:
             result = self._client.call(tool.method, **arguments)
             text = json.dumps(result, default=str)

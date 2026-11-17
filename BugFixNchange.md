@@ -8,6 +8,12 @@ from the code audit of 2026-08-17, `C-nn` changes, `D-nn` documentation debt.
 
 ## 1. Releases
 
+### Unreleased
+
+| Area | What changed | Ids |
+|---|---|---|
+| Agent approvals | `ac mcp` declares every run as an agent's, so gated work arriving over MCP is held for `:approve` even on a session opened without `--agent-id` | F-01r (part) |
+
 ### v0.2.1 (2026-11-16)
 
 The standalone product no longer depends on AgentLighthouse, and every
@@ -116,7 +122,7 @@ the documentation.
 
 | # | Item | Detail | Severity |
 |---|---|---|---|
-| F-01r | Agent detection without `--agent-id` relies on the client | On a session opened from a plain terminal *without* `--agent-id`, a request is treated as an agent's only when the client command declares itself from its environment. A deliberately evasive agent could strip that | Low. Open every agent session with `--agent-id` |
+| F-01r | Agent detection without `--agent-id` relies on the client | On a session opened from a plain terminal *without* `--agent-id`, an `ac` CLI command is treated as an agent's only when it declares itself from its environment. A deliberately evasive agent could strip that. `ac mcp` always declares itself, so the MCP door is closed | Low. Open every agent session with `--agent-id` |
 
 ### 3.2 Dead code
 

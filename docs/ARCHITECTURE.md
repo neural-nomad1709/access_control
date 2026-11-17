@@ -397,15 +397,15 @@ The `Gatekeeper` protocol has four methods: `authorize`, `request_approval`,
 | `LighthouseGatekeeper` (`access-control[lighthouse]` extra) | Embeds AgentLighthouse: default-deny tool policy per SPIFFE identity, held approvals, output scanning with taint, and an Ed25519-signed, hash-chained receipt ledger verifiable offline with `al-verify` |
 
 The MCP surface (`ac mcp`) applies the same rule from the other side: it drops
-any `confirmed` argument, and it does not expose tunnels, session lifecycle or
-credentials at all.
+any `confirmed` argument, declares every run as an agent's (`agent_caller`),
+and does not expose tunnels, session lifecycle or credentials at all.
 
 Two limits, stated plainly. The CLI does not construct a `LighthouseGatekeeper`
 today, so `ac connect` always runs with `LocalGatekeeper`; the embedded plane is
 reachable only by passing `gatekeeper=` to `daemon.build_session` from code. And
-on a session opened from a plain terminal with no agent id, the only thing that
-marks a request as an agent's is the client's own `agent_caller` declaration,
-which it derives from its environment. That stops an agent that approves its own
+on a session opened from a plain terminal with no agent id, an `ac` CLI command
+is marked as an agent's only by its own `agent_caller` declaration, which it
+derives from its environment (`ac mcp` always declares it). That stops an agent that approves its own
 work by habit. It does not stop one that deliberately strips its environment, so
 a session meant for an agent should be opened with `--agent-id`. Both are
 addressed in §19.
