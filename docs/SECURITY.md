@@ -344,9 +344,9 @@ Identity fields use canonical spellings (`timestamp`, `agentId`, `sessionId`,
 `action`, `source`, `target`, `result`) so the trail drops into a SIEM without a
 transform step. Payload fields keep snake_case.
 
-**Sixteen canonical actions:** `ROUTE_RESOLVE`, `SSH_CONNECT`, `WINRM_CONNECT`,
-`RDP_LAUNCH`, `TUNNEL_OPEN`, `AUTHENTICATE`, `COMMAND_EXECUTE`,
-`SCRIPT_EXECUTE`, `FILE_UPLOAD`, `FILE_DOWNLOAD`, `LOG_COLLECT`,
+**Eighteen canonical actions:** `ROUTE_RESOLVE`, `SSH_CONNECT`, `WINRM_CONNECT`,
+`RDP_LAUNCH`, `TUNNEL_OPEN`, `AUTHENTICATE`, `COMMAND_EXECUTE`, `COMMAND`,
+`PREFLIGHT`, `SCRIPT_EXECUTE`, `FILE_UPLOAD`, `FILE_DOWNLOAD`, `LOG_COLLECT`,
 `PERMISSION_REQUEST`, `COMMAND_BLOCKED`, `SESSION_START`, `SESSION_END`,
 `ERROR`. Full field reference:
 [implementation/audit-events.md](implementation/audit-events.md).

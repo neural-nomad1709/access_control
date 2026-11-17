@@ -79,7 +79,7 @@ driving a live session.
 | F-09 | **"Not reached" in an operation report is dead code** | `report_markdown` filters `self.steps` against a set built from `self.steps` — always empty, so steps skipped after a failure are never listed | Low | Compare against the operation's full step list |
 | F-10 | ~~**`ac shell` / `ac rdp` use the node's own `host`/`port`, not the resolved route leg**~~ **Resolved 2026-11-16** | Both now tunnel to the leg's declared endpoint for their protocol (`interactive:` for RDP), falling back to the leg's address on the node's own port | — | Regression tests in `test_cli_interactive_leg.py` |
 | F-11 | **`rules.max_duration_minutes` and `brief.window` are not enforced** | Recorded and rendered only | Low (documented) | Enforce a wall-clock ceiling in `ac brief run`, or document them as advisory in the template too |
-| F-12 | **`PREFLIGHT` and `COMMAND` are emitted but absent from `audit.ACTIONS`** | Nothing breaks — the list is documentation — but a consumer building a filter from it would miss both | Low | Add both names |
+| F-12 | ~~**`PREFLIGHT` and `COMMAND` are emitted but absent from `audit.ACTIONS`**~~ **Resolved 2026-11-16** | Both added; `test_audit_actions.py` scans the source and fails on any emitted name missing from the list | — | — |
 | F-13 | **`check_no_active_install` filters on `$_.SessionId -ne $null`**, which is always true | The `> 2` threshold compensates, so the check still works | Low | Drop the filter, or make it meaningful |
 
 ### 2.3 Dead code

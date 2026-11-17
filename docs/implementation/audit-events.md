@@ -46,19 +46,20 @@ emitting the record twice.
 
 ## Canonical actions
 
-The sixteen names in `audit.ACTIONS`, used for filtering and correlation:
+The eighteen names in `audit.ACTIONS`, used for filtering and correlation:
 
 ```
 ROUTE_RESOLVE    SSH_CONNECT     WINRM_CONNECT   RDP_LAUNCH
-TUNNEL_OPEN      AUTHENTICATE    COMMAND_EXECUTE SCRIPT_EXECUTE
-FILE_UPLOAD      FILE_DOWNLOAD   LOG_COLLECT     PERMISSION_REQUEST
-COMMAND_BLOCKED  SESSION_START   SESSION_END     ERROR
+TUNNEL_OPEN      AUTHENTICATE    COMMAND_EXECUTE COMMAND
+PREFLIGHT        SCRIPT_EXECUTE  FILE_UPLOAD     FILE_DOWNLOAD
+LOG_COLLECT      PERMISSION_REQUEST COMMAND_BLOCKED SESSION_START
+SESSION_END      ERROR
 ```
 
-> Two action names are emitted that are **not** in that list: `PREFLIGHT` (from
-> `daemon.do_preflight`) and `COMMAND` (from the operator prompt). They behave
-> identically; the list is documentation, not an enum. Noted in
-> [../gap-analysis.md](../gap-analysis.md).
+`COMMAND` is a command the operator typed at the `ac connect` prompt;
+`COMMAND_EXECUTE` is one run through the session protocol. `PREFLIGHT` comes
+from `daemon.do_preflight`. `test_audit_actions.py` fails if the code emits a
+name that is missing here.
 
 ---
 
