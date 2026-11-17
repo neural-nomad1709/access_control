@@ -40,6 +40,7 @@ from .credentials import CredentialStore, select_prompter
 from .engine import Engine
 from .errors import AccessControlError, SessionError
 from .gatekeeper import Gatekeeper
+from .logging_setup import set_library_log_level
 from .paths import ensure_dir, session_dir
 from .preflight import run_preflight
 from .route import plan_route
@@ -638,6 +639,7 @@ def build_session(
     )
 
     log_config = inventory.logging
+    set_library_log_level(log_config.level)
     directory = log_config.resolve_directory()
     log_config.prune(directory)
 

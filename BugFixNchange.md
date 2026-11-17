@@ -67,8 +67,8 @@ driving a live session.
 | F-02 | ~~**`ac exec` is not scoped by `--ops`**~~ **Resolved 2026-11-16** | A `--ops` session refuses `ac exec` / `run_command` (also through `ac mcp`) unless `ac connect --allow-exec`; refusals are audited as `COMMAND_BLOCKED`. `ac logs` stays available, and its path can no longer inject a command (it was pasted unquoted into `tail` on POSIX and into a double-quoted string on Windows) | — | Regression tests in `test_exec_scope.py`, including the injection cases; also verified in real bash and PowerShell |
 | F-03 | ~~**RDP launches are not audited**~~ **Resolved 2026-11-16** | `ac rdp` records `RDP_LAUNCH` with node, endpoint, username and whether a credential was staged; a live session records it through the new `rdp_launched` daemon method | — | Regression tests in `test_cli_interactive_leg.py`, `test_daemon.py` |
 | F-04 | ~~**No absolute session lifetime**~~ **Resolved 2026-09-01** | `ac connect --max-lifetime <secs>` caps a session from connect, never refreshed by activity (0 = no ceiling, the default); the watchdog closes it and emits `session.lifetime_timeout`. Regression tests in `test_session_lifetime.py` | — | — |
-| F-05 | **`logging.level` is validated then ignored** | Parsed, rejected if invalid, reported in `to_dict()`, and applied to nothing | Low (misleading) | Apply it, or remove the field |
-| F-06 | **`transport.log` and `errors.log` grow unbounded** | Retention prunes `*.jsonl` and `*.md` only | Low | Size-based rotation, or include them in pruning |
+| F-05 | ~~**`logging.level` is validated then ignored**~~ **Resolved 2026-11-16** | It now sets the verbosity of `transport.log` when a session is built. The audit trail is deliberately never filtered by level | — | Tests in `test_logging_setup.py` |
+| F-06 | ~~**`transport.log` and `errors.log` grow unbounded**~~ **Resolved 2026-11-16** | Both roll over at 5 MiB (3 backups and 1 backup). A rollover blocked by another process on Windows is retried rather than printed | — | Tests in `test_logging_setup.py` |
 
 ### 2.2 Correctness
 

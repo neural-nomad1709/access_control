@@ -90,7 +90,7 @@ Ordered by expected impact. Severity assumes production use with an agent.
 | R-10 | **`operations.yaml` is executable content with no enforced review** — and the repository has no commit history | Medium | High | Put it under real version control with required review before any production use |
 | R-11 | **A shell alongside the agent bypasses every control here.** The whole model assumes `Bash(uv run ac …)` is the only route to the servers | Medium | High | Deny `ssh`, `plink`, `mstsc` and direct edits to the config in the agent's permission set |
 | R-12 | ~~**No CI.** Nothing runs the 340 tests automatically~~ **Resolved 2026-08-31**: `.github/workflows/ci.yml` runs the suite on Ubuntu and Windows on every push and PR | — | — | Lint/type gates remain absent (F-20, F-21) |
-| R-13 | **Unbounded `transport.log` / `errors.log`** | Medium | Low | External rotation |
+| R-13 | ~~**Unbounded `transport.log` / `errors.log`**~~ **Resolved 2026-11-16**: both roll over at 5 MiB (F-06) | — | — | — |
 | R-14 | **Single point of failure: the operator's terminal.** Closing it ends the work | High | Low (by design) | Bounded scope per session; resume with `--start-at` |
 
 ---
@@ -185,8 +185,8 @@ Design choices with consequences, not defects. Each is stated in
    executed)~~ **Done 2026-08-31** — both fixed test-first (`test_cli_tunnel.py`,
    `test_cli_brief_postcheck.py`).
 7. ~~Emit `RDP_LAUNCH` audit records (F-03).~~ **Done 2026-11-16** (`test_cli_interactive_leg.py`, `test_daemon.py`).
-8. Either apply `logging.level` or remove it (F-05).
-9. Rotate or bound `transport.log` and `errors.log` (F-06).
+8. ~~Either apply `logging.level` or remove it (F-05).~~ **Done 2026-11-16** — it sets `transport.log` verbosity.
+9. ~~Rotate or bound `transport.log` and `errors.log` (F-06).~~ **Done 2026-11-16** — both roll over at 5 MiB.
 10. Remove the stray files from the working tree (F-24).
 
 ### Medium term (control gaps)

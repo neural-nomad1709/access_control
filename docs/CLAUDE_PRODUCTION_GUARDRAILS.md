@@ -284,7 +284,7 @@ log output. If that risk is real, narrow what the collectors gather.
 | Artefact | Retention | Control |
 |---|---|---|
 | Audit trails and summaries | `logging.retention_days` (default 30), pruned at session start | **[BUILT]** |
-| `transport.log`, `errors.log` | **Unbounded** | Rotate externally **[GAP]** |
+| `transport.log`, `errors.log` | Bounded by size: roll over at 5 MiB, 3 and 1 backups kept | **[BUILT]** |
 | The conversation transcript | Governed by your model provider settings, not by this tool | **[CONFIG]** |
 | Credentials | Wiped on disconnect, timeout or exit | **[BUILT]** |
 
@@ -759,8 +759,8 @@ rough priority order. Each is tracked in
 | 3 | No output filtering for PII/regulated data | Production log content reaches the model | Narrow collectors; classify operations |
 | 4 | No SSO, no RBAC, no separation of duties | Attribution depends on process | `AC_AGENT_ID`; per-environment inventories; repo permissions |
 | 5 | Audit trail is not tamper-evident | Not chain-of-custody evidence | Ship JSONL to write-once storage as it is produced |
-| 6 | No absolute session lifetime | A session can be renewed indefinitely by activity | Bounded idle timeout; close at the end of the window |
+| 6 | ~~No absolute session lifetime~~ **Closed 2026-09-01** | `ac connect --max-lifetime <secs>` | — |
 | 7 | `max_duration_minutes` and `window` are not enforced | A brief can overrun its stated bounds | Operator watching; alert on long sessions |
 | 8 | Prompt/response content is not recorded by the tool | Cannot reconstruct *why* the agent acted | Model-platform logging joined via `AC_AGENT_ID` |
 | 9 | No change-management integration | `change_ref` is an unvalidated string | Manual attachment of the evidence pack |
-| 10 | `transport.log` / `errors.log` grow unbounded | Disk usage; stale data retained past policy | External rotation |
+| 10 | ~~`transport.log` / `errors.log` grow unbounded~~ **Closed 2026-11-16** | Both roll over at 5 MiB | — |

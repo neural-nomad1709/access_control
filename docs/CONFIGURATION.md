@@ -96,7 +96,7 @@ routes:  [...]      # older alternative to per-node `via:` — cannot be combine
 | `enabled` | bool | `true` | `false` keeps the in-memory trail (so `ac status` works) but writes nothing to disk |
 | `path` | string | platform default | Expands `~` and `%VARS%`. Point at a collected directory for SIEM ingestion. **Never inside the repo.** |
 | `retention_days` | int ≥ 0 | `30` | `0` keeps everything. Pruning of `*.jsonl` / `*.md` older than this runs when a session starts, and never raises |
-| `level` | enum | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR`. Validated; an unknown value is a load error. Currently recorded and reported but not yet used to filter records |
+| `level` | enum | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR`. Validated; an unknown value is a load error. Sets the verbosity of `transport.log` (library logging) when a session is built. The audit trail is never filtered by level |
 
 `AC_LOG_DIR` overrides `path`.
 

@@ -233,17 +233,15 @@ check beyond `ac doctor`. Alerting is expected to come from ingesting the JSONL.
 | `<log dir>/<trace_id>.jsonl` | One session's audit trail, one JSON object per action, fsynced | Pruned by `retention_days` |
 | `<log dir>/<trace_id>.md` | Human summary written on close: hops, timeline, step table, errors | Pruned by `retention_days` |
 | `<log dir>/<session>-NN-<op>.md` | Per-operation shareable report | Pruned by `retention_days` (matches `*.md`) |
-| `<log dir>/transport.log` | Paramiko / pypsrp / spnego, redacted | **Never rotated — see below** |
-| `<log dir>/errors.log` | Tracebacks of unexpected failures | **Never rotated — see below** |
+| `<log dir>/transport.log` | Paramiko / pypsrp / spnego, redacted. Verbosity follows `logging.level` | Rolls over at 5 MiB; 3 backups kept (`transport.log.1` … `.3`) |
+| `<log dir>/errors.log` | Tracebacks of unexpected failures | Rolls over at 5 MiB; 1 backup kept (`errors.log.1`) |
 
 Pruning of `*.jsonl` and `*.md` older than `retention_days` runs when a session
 starts, and never raises — a failure to prune must not stop a session.
 
-> **Operational gap:** `transport.log` and `errors.log` grow without bound and are
-> not covered by retention. They are append-only and usually small, but on a
-> machine that runs the tool constantly they should be rotated externally
-> (logrotate, or a scheduled truncate). Tracked in
-> [gap-analysis.md](gap-analysis.md).
+`transport.log` and `errors.log` are bounded by size, not by `retention_days`:
+at most 20 MiB and 10 MiB on disk respectively. If another `ac` process holds
+`transport.log` open on Windows the rollover is retried on a later record.
 
 ### 5.1 Log content and sensitivity
 
@@ -316,7 +314,6 @@ The tool does not roll itself back. Two mechanisms exist:
 | Monthly | Confirm log retention is doing what policy requires; archive what the SIEM does not keep |
 | Quarterly | Re-run the hardening checklist in [SECURITY.md](SECURITY.md#10-production-hardening-checklist) |
 | On estate change | Update `inventory.yaml`, then `ac routes` and `ac probe` |
-| Occasionally | Truncate or rotate `transport.log` and `errors.log` |
 
 ### 7.2 Adding a host
 
