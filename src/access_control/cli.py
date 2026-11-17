@@ -36,12 +36,12 @@ from .daemon import (
     build_session,
     list_descriptors,
 )
-from .errors import AccessControlError
+from .errors import AccessControlError, RouteError
 from .logging_setup import install_quiet_logging, record_unexpected
 from .operator_shell import run_operator_shell
 from .paths import config_dir, log_dir, session_dir
 from .probe import probe_route, summarise
-from .route import plan_hop_route, plan_route
+from .route import Route, plan_hop_route, plan_route
 from .transport.interactive import launch_rdp, launch_ssh_shell
 
 app = typer.Typer(
@@ -1280,6 +1280,7 @@ def rdp(
     try:
         target = inventory.node(node)
         route = plan_hop_route(inventory, node)
+        dest_host, dest_port = _interactive_destination(route, node, "rdp", target.rdp_port)
     except AccessControlError as exc:
         _fail(str(exc))
         return
@@ -1293,7 +1294,7 @@ def rdp(
     client = attach(node)
     if client is not None:
         tunnel = client.call(
-            "open_tunnel", dest_host=target.host, dest_port=target.rdp_port, purpose=f"rdp:{node}"
+            "open_tunnel", dest_host=dest_host, dest_port=dest_port, purpose=f"rdp:{node}"
         )
         username = (client.call("credentials_for", node_id=node) or {}).get("username")
         _run_rdp(
@@ -1310,8 +1311,27 @@ def rdp(
     console.print(f"No live session for '{node}'; opening a temporary one for the tunnel.")
     console.print(f"route: {route.describe()}")
     with EphemeralSession(node, inventory=inventory) as session:
-        tunnel = session.open_tunnel(target.host, target.rdp_port, purpose=f"rdp:{node}")
+        tunnel = session.open_tunnel(dest_host, dest_port, purpose=f"rdp:{node}")
         _run_rdp(tunnel.endpoint, node, target.user, stage_credentials, full_screen)
+
+
+def _interactive_destination(
+    route: Route, node: str, protocol: str, default_port: int
+) -> tuple[str, int]:
+    """The address a human's client is tunnelled to, as the route declares it.
+
+    The node's own ``hostname`` is only a default; the address valid from the
+    hop before it lives on the resolved leg. A leg endpoint for ``protocol`` wins;
+    otherwise the leg's address on the node's own port, since a Windows node
+    declared with only a WinRM endpoint still answers RDP on its ``rdp_port``.
+    """
+    leg = route.leg_for(node)
+    if leg is None:
+        raise RouteError(f"no declared route leg for '{node}'")
+    for endpoint in (leg.interactive, leg.endpoint):
+        if endpoint is not None and endpoint.protocol == protocol:
+            return endpoint.hostname, endpoint.port
+    return leg.endpoint.hostname, default_port
 
 
 def _run_rdp(
@@ -1454,6 +1474,8 @@ def shell(node: str = typer.Argument(..., help="Host or hop id")) -> None:
     inventory = load_inventory()
     try:
         target = inventory.node(node)
+        route = plan_hop_route(inventory, node)
+        dest_host, dest_port = _interactive_destination(route, node, "ssh", target.port)
     except AccessControlError as exc:
         _fail(str(exc))
         return
@@ -1461,7 +1483,7 @@ def shell(node: str = typer.Argument(..., help="Host or hop id")) -> None:
     client = attach(node)
     if client is not None:
         tunnel = client.call(
-            "open_tunnel", dest_host=target.host, dest_port=target.port, purpose=f"shell:{node}"
+            "open_tunnel", dest_host=dest_host, dest_port=dest_port, purpose=f"shell:{node}"
         )
         try:
             launch_ssh_shell(
@@ -1472,7 +1494,7 @@ def shell(node: str = typer.Argument(..., help="Host or hop id")) -> None:
         return
 
     with EphemeralSession(node, inventory=inventory) as session:
-        tunnel = session.open_tunnel(target.host, target.port, purpose=f"shell:{node}")
+        tunnel = session.open_tunnel(dest_host, dest_port, purpose=f"shell:{node}")
         launch_ssh_shell(
             "127.0.0.1", int(tunnel.local_port or 0), username=target.user, target_label=node
         )
