@@ -168,7 +168,7 @@ idle timer.
   "current_node": "win-app01", "current_address": "corp\\svc_deploy@win-app01.corp.net",
   "connected": true, "closed": false, "connected_at": 1755000926.8,
   "idle_s": 4.2, "idle_timeout_s": 1800, "expires_in_s": 1796,
-  "allowed_operations": ["install-package"],
+  "allowed_operations": ["install-package"], "exec_permitted": false,
   "authenticated_nodes": ["bastion1", "jump1", "win-app01"],
   "tunnels": [{"local": "127.0.0.1:53001", "to": "10.20.4.11:5985", "active": true}]
 }

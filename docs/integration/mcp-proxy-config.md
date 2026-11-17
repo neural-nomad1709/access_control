@@ -39,7 +39,7 @@ agent ──stdio JSON-RPC──▶ al mcp proxy ──stdio──▶ uv run ac 
    ```
 
    `--agent-id` pins the SPIFFE identity the policy names; `--ops` scopes the
-   catalogue. The session marks itself agent-attached, so gated work resolves
+   catalogue and refuses `ac_run_command` (add `--allow-exec` to permit it). The session marks itself agent-attached, so gated work resolves
    out of band (P2), never via a flag.
 
 2. A tool policy for that identity, named for the **MCP tools** the proxy sees

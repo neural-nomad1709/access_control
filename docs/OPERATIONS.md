@@ -37,7 +37,7 @@ uv run ac connect win-app01         uv run ac verify win-app01 --expect-hostname
 ```powershell
 uv sync --extra dev
 uv run ac doctor
-uv run pytest              # 450 passed, 3 skipped; entirely offline
+uv run pytest              # 466 passed, 3 skipped; entirely offline
 ```
 
 ### 2.2 The offline loop
@@ -132,7 +132,8 @@ Production discipline, in priority order:
    identity. A stale forward produces a session that works perfectly against the
    wrong server.
 2. **Scope the session with `--ops`.** It then refuses anything else, even if
-   `operations.yaml` is edited underneath it.
+   `operations.yaml` is edited underneath it, including ad-hoc `ac exec` unless
+   you also pass `--allow-exec`.
 3. **Preview before approving.** `ac preview` renders the real commands.
 4. **Use `--start-at` after a failure**, not a full re-run — repeating a
    destructive step is sometimes actively harmful.

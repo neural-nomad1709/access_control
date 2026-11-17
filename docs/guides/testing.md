@@ -22,6 +22,7 @@ against a mock.
 | `test_security.py` | 65 | Redaction, the command deny-list, credential handling |
 | `test_engine.py` | 60 | Templating, exit-code parsing, expectations, gating, dry run, failure diagnosis, the operation report, canonical actions, timeline |
 | `test_daemon.py` | 22 | Session descriptors and the loopback protocol, over real sockets |
+| `test_exec_scope.py` | 16 | `--ops` refuses `ac exec` unless `--allow-exec`, at the session, engine, daemon and CLI; `ac logs` paths cannot inject a command |
 | `test_audit_actions.py` | 2 | Every action name the code emits is listed in `audit.ACTIONS` |
 | `test_session_lifetime.py` | 10 | The absolute session lifetime (`--max-lifetime`) alongside the idle timeout |
 | `test_brief.py` | 51 | Task brief parsing and validation, preflight checks, host-identity matching, check ordering |
@@ -37,7 +38,7 @@ against a mock.
 | `test_operator_shell_approve.py` | 7 | The `:approve` verb at the operator prompt |
 | `test_packaging_independence.py` | 9 | The standalone install names no AgentLighthouse package and no source outside the repo |
 | `test_e2e.py` | 18 | Two full cycles, the agent path, chain failure modes, hop fallback, forwarding detection, probe reporting — over real SSH |
-| **Total (standalone)** | **450** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
+| **Total (standalone)** | **466** | Plus 3 files skipped: the AgentLighthouse integration tests, listed in [../integration/README.md](../integration/README.md#4-tests-that-need-the-integration) |
 
 Counts move as tests are added; `uv run pytest` is the authority. On a machine
 that has had the integrated install, run `uv sync --extra dev` first, or the

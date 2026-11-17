@@ -69,7 +69,7 @@ name that is missing here.
 
 | Event | Action | Emitted by | Key fields |
 |---|---|---|---|
-| `session.open` | `SESSION_START` | `Session.connect` | `route`, `hops[]` (id, role, source, address, channel, preestablished, context, domain), `allowed_operations[]`, `client_host`, `client_os`, `pid`, `detail` (= route) |
+| `session.open` | `SESSION_START` | `Session.connect` | `route`, `hops[]` (id, role, source, address, channel, preestablished, context, domain), `allowed_operations[]`, `exec_permitted`, `client_host`, `client_os`, `pid`, `detail` (= route) |
 | `session.degraded` | — | `Session._degrade_to_hop` | `held_at`, `reason`, `note` |
 | `session.recovered` | — | `Session.retry_target` | `host_id` |
 | `session.idle_timeout` | — | `SessionServer._watchdog` | `idle_s` |

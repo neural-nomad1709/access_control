@@ -80,7 +80,7 @@ Read-only. The credential store is cleared when it finishes.
 
 ## Sessions
 
-### `ac connect <host> [--ops a,b] [--idle-timeout N] [--max-lifetime N] [--no-shell] [--no-fallback] [--agent-id ID]`
+### `ac connect <host> [--ops a,b] [--allow-exec] [--idle-timeout N] [--max-lifetime N] [--no-shell] [--no-fallback] [--agent-id ID]`
 
 **Run this in your own terminal.** It is the only place a password prompt can
 appear. Prompts once per hop, then holds the authenticated path open, serves it
@@ -88,7 +88,8 @@ on a loopback socket, and gives you a prompt on the host.
 
 | Flag | Default | Effect |
 |---|---|---|
-| `--ops a,b` | all permitted for the host | Restrict this session to these operations. The session then refuses anything else even if `operations.yaml` is edited underneath it |
+| `--ops a,b` | all permitted for the host | Restrict this session to these operations. The session then refuses anything else even if `operations.yaml` is edited underneath it, and refuses ad-hoc commands (`ac exec`) too |
+| `--allow-exec` | off | With `--ops`, still permit `ac exec`. No effect without `--ops` |
 | `--idle-timeout N` | `1800` | Seconds of inactivity before the session closes and credentials are wiped. `0` = never |
 | `--max-lifetime N` | `0` | Absolute seconds before the session closes regardless of activity, measured from connect. Bounds a continuously driven session the idle timer alone would keep open. `0` = no ceiling |
 | `--no-shell` | off | Hold the session open with no prompt — for a service wrapper, or a log you want kept clean. Close with Ctrl-C |
@@ -225,13 +226,19 @@ warning / verbose streams separately.
 > On Windows, wrap the remote script in **single quotes** so your local PowerShell
 > does not expand `$env:` before the command is sent.
 
-`ac exec` is **not** restricted by `ac connect --ops` — that allow-list covers
-catalogue operations. The deny-list still applies.
+A session opened with `ac connect --ops` refuses `ac exec` (exit 1, audited as
+`COMMAND_BLOCKED`) unless it was also opened with `--allow-exec`. The deny-list
+applies either way. Commands typed at the `ac connect` prompt are the
+operator's own and are not affected.
 
 ### `ac logs <host> --path <file-or-glob> [--tail N] [--json]`
 
 Tails a remote log. A glob resolves to the **most recently written** match, which
 is how you find an installer log with a generated name. `--tail` defaults to 200.
+
+Works in a session restricted with `--ops`. The path is passed to the remote
+shell as one literal argument (glob characters still expand), so it cannot carry
+a second command.
 
 ### `ac upload <host> <local> <remote>`
 

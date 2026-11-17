@@ -354,7 +354,7 @@ There is no user database and no RBAC inside this tool. Authorization is the
 |---|---|---|---|
 | 1 | **Reachability** | `routegraph` / `route` | A host with no declared route, an ambiguous route, or one crossing an environment boundary |
 | 2 | **Catalogue binding** | `Operation.applies_to(host)` | An operation whose `host_ids`/`tags` do not include this host |
-| 3 | **Session allow-list** | `ac connect --ops a,b` → `Session.permits` | Any operation not named at connect time |
+| 3 | **Session allow-list** | `ac connect --ops a,b` → `Session.permits`, `Session.exec_permitted` | Any operation not named at connect time, and ad-hoc commands unless `--allow-exec` |
 | 4 | **Permission gate** | `Operation.is_gated` + `--confirm` | A gated or destructive operation without explicit approval, quoting the rendered commands |
 | 5 | **Command deny-list** | `safety.check` on every rendered command | `BLOCKED` outright (no override); `CONFIRM` without confirmation |
 
@@ -696,8 +696,9 @@ expected by any buyer and are not reasons to choose this tool over another.
 Recorded here so that §18 is not read as a claim of completeness. Detail and
 severity are in [production-readiness.md](production-readiness.md).
 
-1. **Ad-hoc commands are default-allow.** `run_command` runs anything the
-   pattern list in `safety.py` does not match.
+1. **Ad-hoc commands are default-allow in an unrestricted session.** Without
+   `--ops`, `run_command` runs anything the pattern list in `safety.py` does not
+   match. A `--ops` session refuses it unless `--allow-exec`.
 2. **Agent-attached mode depends on how the session was opened** (§8.1).
 3. **The embedded governance plane is not wired into the CLI** (§8.1).
 4. **Controls are client-side.** The daemon runs as the same OS user as the

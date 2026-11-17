@@ -330,14 +330,13 @@ themselves. **[CONFIG]**
 |---|---|---|
 | **Fully read-only** | `ac connect <host> --ops windows-health,collect-diagnostics` | Health snapshots, diagnostics, `ac logs`, `ac status`, `ac timeline` |
 | **Read + gated write** | `--ops` including a destructive operation, agent must pass `--confirm` | Everything above, plus the named change with approval |
-| **Investigate only** | Read-only `--ops`, plus `ac exec` for `ALLOWED`-class commands | The deny-list still gates anything state-changing |
+| **Investigate only** | Read-only `--ops` plus `--allow-exec` | Everything in "Fully read-only", plus `ac exec` for `ALLOWED`-class commands. The deny-list still gates anything state-changing |
 | **No session** | Do not connect | `--dry-run` and `preview` still work; nothing touches a server |
 
-Note that `ac exec` is **not** covered by `--ops` — the allow-list applies to
-catalogue operations. An agent with a live session can run any `ALLOWED`-class
-ad-hoc command and, with `--confirm`, any `CONFIRM`-class one. If that is too
-wide, do not give the agent a live session; run the session yourself and hand it
-results. **[GAP] + [CONFIG]**
+A session opened with `--ops` refuses `ac exec` (and the `run_command` tool
+behind it, including through `ac mcp`) unless the operator also passed
+`--allow-exec`. `ac logs` stays available. An unrestricted session (no `--ops`)
+still permits ad-hoc commands, gated by the deny-list. **[BUILT]**
 
 ### 5.3 Change management integration
 
@@ -390,7 +389,8 @@ Safe for an agent to perform unsupervised **within a scoped session**:
   `brief validate`, `brief show`, `campaign validate`, `run --dry-run`.
 - Verification: `ac verify`, `ac status`.
 - Read-only operations from the catalogue (`requires_permission: false`).
-- Diagnostics: `ac logs`, `ac exec` with `ALLOWED`-class commands.
+- Diagnostics: `ac logs`; `ac exec` with `ALLOWED`-class commands when the
+  session was opened with `--allow-exec`.
 - Evidence gathering: `ac timeline`, `ac audit`.
 - Relaying reports and proposing next actions.
 
@@ -622,7 +622,8 @@ uv run ac connect prod-app01 --ops windows-health,collect-diagnostics --idle-tim
 ```
 
 The agent can now investigate and report, and cannot change anything through the
-catalogue. Ad-hoc `ac exec` remains available for `ALLOWED`-class commands only.
+catalogue. Ad-hoc `ac exec` is refused; add `--allow-exec` to permit it for
+`ALLOWED`-class commands. `ac logs` works either way.
 
 ### 8.4 Change-window session with a reviewed brief
 
@@ -754,7 +755,7 @@ rough priority order. Each is tracked in
 | # | Gap | Impact | Compensating control today |
 |---|---|---|---|
 | 1 | `--confirm` does not prove a human approved *at that moment* | An agent can self-approve a gated operation on a live session | Operator presence; `--ops` scoping; run destructive steps yourself |
-| 2 | `ac exec` is not covered by the `--ops` allow-list | A scoped session still permits ad-hoc commands | The deny-list; do not hand an agent a session you would not hand a shell |
+| 2 | ~~`ac exec` is not covered by the `--ops` allow-list~~ **Closed 2026-11-16** | A `--ops` session refuses `ac exec` unless `--allow-exec` is given | — |
 | 3 | No output filtering for PII/regulated data | Production log content reaches the model | Narrow collectors; classify operations |
 | 4 | No SSO, no RBAC, no separation of duties | Attribution depends on process | `AC_AGENT_ID`; per-environment inventories; repo permissions |
 | 5 | Audit trail is not tamper-evident | Not chain-of-custody evidence | Ship JSONL to write-once storage as it is produced |

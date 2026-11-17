@@ -98,13 +98,16 @@ Options worth knowing:
 
 ```powershell
 uv run ac connect win-target02 --ops install-package,windows-health
+uv run ac connect win-target02 --ops windows-health --allow-exec   # also permit ac exec
 uv run ac connect win-target02 --idle-timeout 7200      # 0 = never expire
 uv run ac connect win-target02 --no-shell               # hold it open with no prompt
 uv run ac connect win-target02 --no-fallback            # fail rather than hold at a hop
 ```
 
 `--ops` restricts the session to those operations. Belt and braces: the session
-then refuses anything else even if `operations.yaml` is edited underneath it.
+then refuses anything else even if `operations.yaml` is edited underneath it. It
+also refuses ad-hoc `ac exec` commands unless you add `--allow-exec`; `ac logs`
+and what you type at the prompt are unaffected.
 Default idle timeout is 30 minutes; when it expires the credentials are wiped and
 you reconnect.
 
